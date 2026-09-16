@@ -1,0 +1,33 @@
+{
+  "version": "1.0.0",
+  "id": "demo",
+  "name": "冷却系统监控",
+  "canvas": {
+    "width": 1440,
+    "height": 900,
+    "background": "#0e1d2b"
+  },
+  "components": [
+    {
+      "id": "metric-pump-01",
+      "type": "metric-card",
+      "position": {
+        "x": 455,
+        "y": 250
+      },
+      "size": {
+        "width": 300,
+        "height": 214
+      },
+      "props": {
+        "deviceName": "1号冷却泵",
+        "title": "出口温度",
+        "dataKey": "pump1.outlet_temp",
+        "unit": "°C",
+        "precision": 1,
+        "alarmThreshold": 80
+      }
+    }
+  ]
+}
+

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+playwright-report/
+test-results/
+.playwright-cli/
+.idea/
+.DS_Store
+*.local

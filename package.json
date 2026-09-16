@@ -1,0 +1,24 @@
+{
+  "name": "industrial-monitoring",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@12.4.1",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @industrial/web dev",
+    "dev:api": "cd services/api && uv run --python 3.12 uvicorn industrial_api.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:simulator": "python3 services/simulator/simulator.py",
+    "db:migrate": "cd services/api && uv run --python 3.12 alembic upgrade head",
+    "schema:export": "pnpm --filter @industrial/schema export:json-schema",
+    "build": "pnpm --filter @industrial/web build",
+    "typecheck": "pnpm --filter @industrial/web typecheck",
+    "test": "pnpm --filter @industrial/schema test && pnpm --filter @industrial/telemetry-client test",
+    "test:api": "cd services/api && uv run --python 3.12 pytest",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

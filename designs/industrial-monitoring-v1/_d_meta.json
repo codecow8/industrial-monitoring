@@ -1,0 +1,28 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "工业监控编辑器第一版": {
+      "versions": [
+        {
+          "path": "industrial-editor.html",
+          "createdAt": "2026-09-12T02:22:21.710Z",
+          "status": "approved"
+        },
+        {
+          "path": "industrial-editor-v2.html",
+          "createdAt": "2026-09-14T11:36:49.917Z",
+          "status": "approved"
+        },
+        {
+          "path": "industrial-editor-v3.html",
+          "createdAt": "2026-09-15T02:26:23.334Z",
+          "status": "approved"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-09-12T02:22:21.715Z",
+  "updatedAt": "2026-09-15T02:31:34.164Z"
+}

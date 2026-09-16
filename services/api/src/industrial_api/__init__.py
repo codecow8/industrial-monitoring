@@ -1,0 +1,2 @@
+"""Industrial monitoring backend."""
+

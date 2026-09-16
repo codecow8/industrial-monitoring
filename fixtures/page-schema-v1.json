@@ -1,0 +1,139 @@
+{
+  "type": "object",
+  "required": [
+    "version",
+    "id",
+    "name",
+    "canvas",
+    "components"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canvas": {
+      "type": "object",
+      "required": [
+        "width",
+        "height",
+        "background"
+      ],
+      "properties": {
+        "width": {
+          "type": "number",
+          "minimum": 320
+        },
+        "height": {
+          "type": "number",
+          "minimum": 240
+        },
+        "background": {
+          "type": "string"
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "position",
+          "size",
+          "props"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "const": "metric-card"
+          },
+          "position": {
+            "type": "object",
+            "required": [
+              "x",
+              "y"
+            ],
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            }
+          },
+          "size": {
+            "type": "object",
+            "required": [
+              "width",
+              "height"
+            ],
+            "properties": {
+              "width": {
+                "type": "number",
+                "minimum": 180
+              },
+              "height": {
+                "type": "number",
+                "minimum": 140
+              }
+            }
+          },
+          "props": {
+            "type": "object",
+            "required": [
+              "deviceName",
+              "title",
+              "dataKey",
+              "unit",
+              "precision",
+              "alarmThreshold"
+            ],
+            "properties": {
+              "deviceName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "dataKey": {
+                "type": "string",
+                "minLength": 1
+              },
+              "unit": {
+                "type": "string"
+              },
+              "precision": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "alarmThreshold": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$id": "PageSchemaV1",
+  "additionalProperties": false
+}
