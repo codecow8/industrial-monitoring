@@ -11,6 +11,11 @@ export interface DataPointView {
   ageMs: number | null;
 }
 
+export interface TrendSampleView {
+  sampledAt: number;
+  value: number;
+}
+
 export function componentNodeStyle(node: ComponentNode): Record<string, string> {
   return {
     left: `${node.position.x}px`,

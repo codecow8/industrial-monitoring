@@ -5,8 +5,10 @@ import {
   createSeedPageSchema,
   isPageSchema,
   validatePageSchema,
+  type ComponentNode,
   type MetricCardNode,
   type PageSchema,
+  type TrendChartNode,
 } from "@industrial/schema";
 import { loadPageSchema, savePageSchema } from "@/data/pageRepository";
 
@@ -50,18 +52,59 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     dirty.value = false;
   }
 
-  function updateMetricProps(patch: Partial<MetricCardNode["props"]>): void {
+  type EditableProps = TrendChartNode["props"] & { deviceName?: string };
+
+  function updateSelectedProps(patch: Partial<EditableProps>): void {
     if (!selectedNode.value) return;
     const next = clonePageSchema(schema.value);
     const node = next.components.find((item) => item.id === selectedId.value);
     if (!node) return;
-    node.props = { ...node.props, ...patch };
+    if (node.type === "metric-card") {
+      node.props = { ...node.props, ...patch } as MetricCardNode["props"];
+    } else {
+      const { deviceName: _deviceName, ...sharedPatch } = patch;
+      node.props = { ...node.props, ...sharedPatch };
+    }
     record(next);
   }
 
+  function addTrendChart(): void {
+    const existing = schema.value.components.find((node) => node.type === "trend-chart");
+    if (existing) {
+      selectedId.value = existing.id;
+      return;
+    }
+    const next = clonePageSchema(schema.value);
+    const trendChart: TrendChartNode = {
+      id: "trend-pump-01",
+      type: "trend-chart",
+      position: { x: 80, y: 500 },
+      size: { width: 720, height: 300 },
+      props: {
+        title: "1号冷却泵出口温度趋势",
+        dataKey: "pump1.outlet_temp",
+        unit: "°C",
+        precision: 1,
+        alarmThreshold: 80,
+      },
+    };
+    next.components.push(trendChart);
+    record(next);
+    selectedId.value = trendChart.id;
+  }
+
+  function removeComponent(componentId: string): void {
+    const next = clonePageSchema(schema.value);
+    const index = next.components.findIndex((node) => node.id === componentId);
+    if (index < 0) return;
+    next.components.splice(index, 1);
+    record(next);
+    selectedId.value = next.components[index]?.id ?? next.components[index - 1]?.id ?? null;
+  }
+
   function updateSelectedGeometry(
-    position: MetricCardNode["position"],
-    size: MetricCardNode["size"],
+    position: ComponentNode["position"],
+    size: ComponentNode["size"],
   ): void {
     const next = clonePageSchema(schema.value);
     const node = next.components.find((item) => item.id === selectedId.value);
@@ -107,7 +150,9 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     canRedo,
     load,
     save,
-    updateMetricProps,
+    updateSelectedProps,
+    addTrendChart,
+    removeComponent,
     updateSelectedGeometry,
     importFromText,
     undo,

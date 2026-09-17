@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { PageSchema } from "@industrial/schema";
 import type { ComponentNode } from "@industrial/schema";
-import type { ComponentRegistry, DataPointView } from "./index";
+import type { ComponentRegistry, DataPointView, TrendSampleView } from "./index";
 import { componentNodeStyle } from "./index";
 
 const props = defineProps<{
   schema: PageSchema;
   registry: ComponentRegistry;
   dataPoints?: Record<string, DataPointView>;
+  trendSamples?: Record<string, readonly TrendSampleView[]>;
 }>();
 
 const previewPoint: DataPointView = { value: 68.4, freshness: "fresh", ageMs: 0 };
@@ -40,6 +41,7 @@ function dataPointFor(node: ComponentNode): DataPointView {
         :is="registry[node.type]"
         :node="node"
         :data-point="dataPointFor(node)"
+        :trend-samples="node.type === 'trend-chart' ? (trendSamples?.[node.props.dataKey] ?? []) : undefined"
       />
     </div>
   </div>

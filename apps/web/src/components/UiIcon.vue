@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineProps<{
-  name: "play" | "save" | "chart" | "text" | "line" | "device" | "bell" | "lock" | "copy" | "import" | "cursor" | "undo" | "redo" | "back";
+  name: "play" | "save" | "chart" | "text" | "line" | "device" | "bell" | "lock" | "copy" | "import" | "cursor" | "undo" | "redo" | "trash" | "back";
   size?: number;
 }>();
 </script>
@@ -60,9 +60,11 @@ defineProps<{
     <template v-else-if="name === 'redo'">
       <path d="m15 7 4 4-4 4M19 11h-8a6 6 0 0 0-6 6" />
     </template>
+    <template v-else-if="name === 'trash'">
+      <path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6" />
+    </template>
     <template v-else>
       <path d="m15 18-6-6 6-6M9 12h11" />
     </template>
   </svg>
 </template>
-

@@ -9,6 +9,7 @@ import type { PageSchema } from "@industrial/schema";
 import { TelemetrySession } from "@industrial/telemetry-client";
 import type { ConnectionState } from "@industrial/telemetry-client";
 import type { DataPointView } from "@industrial/renderer-core";
+import type { TrendSampleView } from "@industrial/renderer-core";
 import { loadPublishedPage } from "@/data/pageRepository";
 import UiIcon from "@/components/UiIcon.vue";
 
@@ -37,6 +38,17 @@ const dataPoints = computed<Record<string, DataPointView>>(() => {
       telemetrySession?.point(node.props.dataKey),
     ]),
   ) as Record<string, DataPointView>;
+});
+
+const trendSamples = computed<Record<string, readonly TrendSampleView[]>>(() => {
+  telemetryRevision.value;
+  if (!schema.value || !telemetrySession) return {};
+  return Object.fromEntries(
+    schema.value.components.map((node) => [
+      node.props.dataKey,
+      telemetrySession?.trendSamples(node.props.dataKey) ?? [],
+    ]),
+  );
 });
 
 function websocketUrl(pageId: string): string {
@@ -88,6 +100,7 @@ onBeforeUnmount(() => telemetrySession?.stop());
         :schema="schema"
         :registry="webComponentRegistry"
         :data-points="dataPoints"
+        :trend-samples="trendSamples"
       />
       <div v-else-if="!loading" class="runtime-empty" role="status">
         <strong>页面尚未发布</strong>

@@ -40,13 +40,14 @@ const dragStart = ref({ x: 0, y: 0 });
 const dragOffset = ref<[number, number]>([0, 0]);
 const resizeStart = ref({ x: 0, y: 0, width: 0, height: 0 });
 const resizeResult = ref({ x: 0, y: 0, width: 0, height: 0 });
+const contextMenu = ref<{ componentId: string; x: number; y: number } | null>(null);
 
 const schemaText = computed(() => JSON.stringify(store.schema, null, 2));
 
 const palette = [
-  { name: "指标卡", icon: "chart" as const, active: true },
+  { name: "指标卡", icon: "chart" as const, active: true, action: undefined },
   { name: "文本", icon: "text" as const, active: false },
-  { name: "折线图", icon: "line" as const, active: false },
+  { name: "折线图", icon: "line" as const, active: true, action: () => { store.addTrendChart(); syncTarget(); } },
   { name: "设备状态", icon: "device" as const, active: false },
   { name: "告警列表", icon: "bell" as const, active: false },
 ];
@@ -77,7 +78,7 @@ function updateTextProp(
   key: "deviceName" | "title" | "dataKey" | "unit",
   value: string,
 ): void {
-  store.updateMetricProps({ [key]: value });
+  store.updateSelectedProps({ [key]: value });
 }
 
 function updateNumberProp(
@@ -85,7 +86,7 @@ function updateNumberProp(
   value: number | undefined,
 ): void {
   if (value === undefined || Number.isNaN(value)) return;
-  store.updateMetricProps({ [key]: value });
+  store.updateSelectedProps({ [key]: value });
 }
 
 async function saveDraft(showMessage = true): Promise<boolean> {
@@ -152,6 +153,35 @@ function locked(name: string): void {
   ElMessage.info(`${name}将在后续任务开放`);
 }
 
+function closeContextMenu(): void {
+  contextMenu.value = null;
+}
+
+function openContextMenu(event: MouseEvent): void {
+  event.preventDefault();
+  const target = event.target instanceof Element
+    ? event.target.closest<HTMLElement>("[data-component-id]")
+    : null;
+  if (!target?.dataset.componentId) {
+    closeContextMenu();
+    return;
+  }
+  store.selectedId = target.dataset.componentId;
+  contextMenu.value = {
+    componentId: target.dataset.componentId,
+    x: Math.min(event.clientX, window.innerWidth - 124),
+    y: Math.min(event.clientY, window.innerHeight - 38),
+  };
+  syncTarget();
+}
+
+function deleteContextComponent(): void {
+  if (!contextMenu.value) return;
+  store.removeComponent(contextMenu.value.componentId);
+  closeContextMenu();
+  syncTarget();
+}
+
 function onDragStart(): void {
   const node = store.selectedNode;
   if (!node) return;
@@ -210,7 +240,7 @@ function onResizeEnd(): void {
 </script>
 
 <template>
-  <main class="app-shell" data-screen-label="监控画面编辑器" :aria-busy="loading">
+  <main class="app-shell" data-screen-label="监控画面编辑器" :aria-busy="loading" @pointerdown="closeContextMenu">
     <header class="topbar">
       <div class="topbar__identity">
         <div class="brand"><span class="brand__mark"></span><strong>工业智控平台</strong></div>
@@ -246,7 +276,7 @@ function onResizeEnd(): void {
             class="palette-item"
             :class="{ 'palette-item--active': item.active, 'palette-item--locked': !item.active }"
             type="button"
-            @click="item.active ? undefined : locked(item.name)"
+            @click="item.active ? item.action?.() : locked(item.name)"
           >
             <UiIcon :name="item.icon" :size="23" />
             <span>{{ item.name }}</span>
@@ -256,7 +286,7 @@ function onResizeEnd(): void {
         <div class="palette-note"><span></span>更多组件开发中<span></span></div>
       </aside>
 
-      <section ref="canvasViewport" class="canvas-viewport" aria-label="编辑画布">
+      <section ref="canvasViewport" class="canvas-viewport" aria-label="编辑画布" @contextmenu="openContextMenu">
         <div class="canvas-tools">
           <button class="canvas-tool canvas-tool--active" type="button" aria-label="选择"><UiIcon name="cursor" /></button>
           <button class="canvas-tool" type="button" aria-label="撤销" :disabled="!store.canUndo" @click="store.undo"><UiIcon name="undo" /></button>
@@ -285,15 +315,15 @@ function onResizeEnd(): void {
       <aside class="inspector-panel" aria-label="属性配置">
         <h2 class="panel-title">属性配置</h2>
         <section v-if="store.selectedNode" class="inspector-section">
-          <div class="section-heading"><strong>基础属性</strong><code>metric-card</code></div>
+          <div class="section-heading"><strong>基础属性</strong><code>{{ store.selectedNode.type }}</code></div>
           <div class="field-list">
-            <label class="field-row">
+            <label v-if="store.selectedNode.type === 'metric-card'" class="field-row">
               <span>设备名称</span>
               <el-input aria-label="设备名称" :model-value="store.selectedNode.props.deviceName" @update:model-value="updateTextProp('deviceName', $event)" />
             </label>
             <label class="field-row">
-              <span>指标标题</span>
-              <el-input aria-label="指标标题" :model-value="store.selectedNode.props.title" @update:model-value="updateTextProp('title', $event)" />
+              <span>{{ store.selectedNode.type === "metric-card" ? "指标标题" : "图表标题" }}</span>
+              <el-input :aria-label="store.selectedNode.type === 'metric-card' ? '指标标题' : '图表标题'" :model-value="store.selectedNode.props.title" @update:model-value="updateTextProp('title', $event)" />
             </label>
             <label class="field-row">
               <span>数据键</span>
@@ -332,6 +362,21 @@ function onResizeEnd(): void {
         <span class="statusbar__push">位置 <strong>X {{ store.selectedNode?.position.x }} · Y {{ store.selectedNode?.position.y }}</strong></span>
         <span>缩放 <strong>100%</strong></span>
       </footer>
+    </div>
+
+    <div
+      v-if="contextMenu"
+      class="component-context-menu"
+      role="menu"
+      aria-label="组件操作"
+      :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+      @pointerdown.stop
+      @contextmenu.prevent
+    >
+      <button type="button" role="menuitem" @click="deleteContextComponent">
+        <UiIcon name="trash" :size="13" />
+        删除
+      </button>
     </div>
 
     <div v-if="loading" class="loading-cover" data-testid="draft-loading" role="status">

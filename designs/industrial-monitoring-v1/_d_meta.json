@@ -19,10 +19,30 @@
           "path": "industrial-editor-v3.html",
           "createdAt": "2026-09-15T02:26:23.334Z",
           "status": "approved"
+        },
+        {
+          "path": "industrial-editor-v4.html",
+          "createdAt": "2026-09-16T07:14:04.678Z",
+          "status": "approved",
+          "subtitle": "实时趋势图闭环",
+          "viewport": {
+            "width": 1440,
+            "height": 960
+          }
+        },
+        {
+          "path": "industrial-editor-v4.1.0.html",
+          "createdAt": "2026-09-17T06:45:56.172Z",
+          "status": "approved",
+          "subtitle": "组件右键菜单与删除",
+          "viewport": {
+            "width": 1440,
+            "height": 960
+          }
         }
       ]
     }
   },
   "createdAt": "2026-09-12T02:22:21.715Z",
-  "updatedAt": "2026-09-15T02:31:34.164Z"
+  "updatedAt": "2026-09-17T07:03:11.622Z"
 }

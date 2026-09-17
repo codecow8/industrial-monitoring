@@ -19,3 +19,7 @@ _Avoid_: Telemetry Update, history
 **Data Freshness**:
 Data Point 是否在预期时间内收到过新 Telemetry Update 的状态，独立于 WebSocket 连接是否仍然存在。
 _Avoid_: Online status, connection status
+
+**Trend Sample**:
+当前运行会话中按固定时间间隔记录的 Data Point 观测值，用于展示短时趋势；它不是可持久化查询的历史数据。
+_Avoid_: Telemetry History, Historical Record

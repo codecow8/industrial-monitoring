@@ -12,6 +12,11 @@ export interface TelemetryPoint {
   ageMs: number | null;
 }
 
+export interface TrendSample {
+  readonly sampledAt: number;
+  readonly value: number;
+}
+
 export interface TelemetrySocket {
   addEventListener(
     type: string,
@@ -54,6 +59,7 @@ export class TelemetrySession {
   private readonly createSocket: (url: string) => TelemetrySocket;
   private readonly staleAfterMs: number;
   private readonly points = new Map<string, StoredPoint>();
+  private readonly samples = new Map<string, TrendSample[]>();
   private readonly pendingValues = new Map<string, number>();
   private readonly listeners = new Set<() => void>();
   private socket: TelemetrySocket | null = null;
@@ -111,6 +117,10 @@ export class TelemetrySession {
     };
   }
 
+  trendSamples(dataKey: string): readonly TrendSample[] {
+    return [...(this.samples.get(dataKey) ?? [])];
+  }
+
   private connect(isReconnect: boolean): void {
     this.setConnection(isReconnect ? "reconnecting" : "connecting");
     const socket = this.createSocket(this.url);
@@ -154,6 +164,15 @@ export class TelemetrySession {
     const updatedAt = this.scheduler.now();
     for (const [dataKey, value] of this.pendingValues) {
       this.points.set(dataKey, { value, updatedAt });
+      const sampledAt = Math.floor(updatedAt / 1000) * 1000;
+      const samples = this.samples.get(dataKey) ?? [];
+      const last = samples.at(-1);
+      if (last?.sampledAt === sampledAt) {
+        samples[samples.length - 1] = { sampledAt, value };
+      } else {
+        samples.push({ sampledAt, value });
+      }
+      this.samples.set(dataKey, samples.slice(-60));
     }
     this.pendingValues.clear();
     this.scheduleStaleCheck();

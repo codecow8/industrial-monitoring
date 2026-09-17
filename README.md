@@ -13,7 +13,7 @@
 
 Task 1 不包含后端、WebSocket、ECharts、Electron、小程序或 Agent。
 
-Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Electron、小程序、真实设备、历史曲线和 Agent 仍不在当前范围内。
+Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task 3 已完成实时趋势图切片。Electron、小程序、真实设备、持久化历史曲线和 Agent 仍不在当前范围内。
 
 ## 目录职责
 
@@ -27,6 +27,10 @@ services/api             FastAPI 页面/遥测接口与 Alembic 迁移
 services/simulator       每秒推送确定性温度序列的独立 Python 进程
 fixtures                 前后端共享的 PageSchema 合同和样例
 ```
+
+## UI 设计流程
+
+版本化 HTML 原型是 UI 设计源，Vue 是可执行实现。所有 UI 变更（包括右键菜单、按钮和间距微调）都必须先产出新的 HTML 原型版本并获得明确评审通过，再进入 Vue 实现。详见 [UI Design Workflow](./docs/design-workflow.md)。
 
 ## 当前接口
 

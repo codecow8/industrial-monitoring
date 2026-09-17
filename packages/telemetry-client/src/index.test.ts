@@ -130,4 +130,39 @@ describe("TelemetrySession", () => {
     sockets[6].emit("close");
     expect(scheduler.timers[0].delay).toBe(1000);
   });
+
+  it("keeps the last telemetry value in each one-second Trend Sample", () => {
+    const { scheduler, session, sockets } = setup();
+    sockets[0].emit("open");
+
+    sockets[0].message({ "pump1.outlet_temp": 68.4 });
+    scheduler.flushFrame();
+    scheduler.time = 400;
+    sockets[0].message({ "pump1.outlet_temp": 72.0 });
+    scheduler.flushFrame();
+    scheduler.time = 1000;
+    sockets[0].message({ "pump1.outlet_temp": 78.5 });
+    scheduler.flushFrame();
+
+    expect(session.trendSamples("pump1.outlet_temp")).toEqual([
+      { sampledAt: 0, value: 72.0 },
+      { sampledAt: 1000, value: 78.5 },
+    ]);
+  });
+
+  it("keeps at most sixty Trend Samples for a data point", () => {
+    const { scheduler, session, sockets } = setup();
+    sockets[0].emit("open");
+
+    for (let second = 0; second <= 60; second += 1) {
+      scheduler.time = second * 1000;
+      sockets[0].message({ "pump1.outlet_temp": second });
+      scheduler.flushFrame();
+    }
+
+    const samples = session.trendSamples("pump1.outlet_temp");
+    expect(samples).toHaveLength(60);
+    expect(samples[0]).toEqual({ sampledAt: 1000, value: 1 });
+    expect(samples.at(-1)).toEqual({ sampledAt: 60_000, value: 60 });
+  });
 });
