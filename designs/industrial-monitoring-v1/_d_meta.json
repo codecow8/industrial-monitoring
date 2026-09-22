@@ -3,38 +3,13 @@
   "designSystems": [],
   "primaryDesignSystem": null,
   "assets": {
-    "工业监控编辑器第一版": {
+    "工业监控编辑器": {
       "versions": [
         {
           "path": "industrial-editor.html",
-          "createdAt": "2026-09-12T02:22:21.710Z",
-          "status": "approved"
-        },
-        {
-          "path": "industrial-editor-v2.html",
-          "createdAt": "2026-09-14T11:36:49.917Z",
-          "status": "approved"
-        },
-        {
-          "path": "industrial-editor-v3.html",
-          "createdAt": "2026-09-15T02:26:23.334Z",
-          "status": "approved"
-        },
-        {
-          "path": "industrial-editor-v4.html",
-          "createdAt": "2026-09-16T07:14:04.678Z",
+          "createdAt": "2026-09-18T00:54:59.299Z",
           "status": "approved",
-          "subtitle": "实时趋势图闭环",
-          "viewport": {
-            "width": 1440,
-            "height": 960
-          }
-        },
-        {
-          "path": "industrial-editor-v4.1.0.html",
-          "createdAt": "2026-09-17T06:45:56.172Z",
-          "status": "approved",
-          "subtitle": "组件右键菜单与删除",
+          "subtitle": "设备状态组件",
           "viewport": {
             "width": 1440,
             "height": 960
@@ -44,5 +19,5 @@
     }
   },
   "createdAt": "2026-09-12T02:22:21.715Z",
-  "updatedAt": "2026-09-17T07:03:11.622Z"
+  "updatedAt": "2026-09-18T00:58:59.651Z"
 }
