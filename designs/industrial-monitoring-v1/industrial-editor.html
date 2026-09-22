@@ -468,6 +468,11 @@
         height: 180px;
       }
 
+      .component-frame.alarm-frame {
+        width: 520px;
+        height: 300px;
+      }
+
       .prototype-context-menu {
         position: fixed;
         z-index: 50;
@@ -691,6 +696,74 @@
       .device-state-card.waiting .device-state-name,
       .device-state-card.stale .device-state-name { color: #9fb1be; }
       .device-state-card.stale .device-state-body { opacity: 0.58; }
+
+      .alarm-list-card {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        color: #eaf2f7;
+        background: linear-gradient(145deg, #172d3e 0%, #102332 72%, #0e202d 100%);
+        border: 1px solid rgba(89, 140, 172, 0.35);
+      }
+
+      .alarm-list-header {
+        height: 52px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 0 18px;
+        border-bottom: 1px solid rgba(142, 177, 199, 0.16);
+        cursor: grab;
+      }
+
+      .alarm-list-heading { display: flex; align-items: center; gap: 9px; min-width: 0; }
+      .alarm-list-heading strong { overflow: hidden; font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+      .alarm-example-badge { padding: 2px 6px; color: #8db8d2; font-size: 9px; background: rgba(50, 116, 153, 0.2); border: 1px solid rgba(102, 164, 198, 0.28); border-radius: 2px; white-space: nowrap; }
+      .alarm-count { padding: 3px 7px; color: #8ca1b0; font-size: 10px; background: rgba(95, 119, 136, 0.14); border: 1px solid rgba(121, 151, 171, 0.18); border-radius: 2px; white-space: nowrap; }
+      .alarm-count.active { color: #f1c982; background: rgba(155, 101, 23, 0.2); border-color: rgba(234, 167, 60, 0.26); }
+      .alarm-list-body { height: calc(100% - 52px); overflow-y: auto; }
+      .alarm-rows { padding: 8px; }
+
+      .alarm-row {
+        min-height: 92px;
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 11px;
+        padding: 12px 12px 11px;
+        border-bottom: 1px solid rgba(137, 168, 188, 0.13);
+      }
+
+      .alarm-row:last-child { border-bottom: 0; }
+      .alarm-kind-icon { width: 32px; height: 32px; display: grid; place-items: center; color: #efbd68; background: rgba(155, 101, 23, 0.2); border: 1px solid rgba(234, 167, 60, 0.26); border-radius: 50%; }
+      .alarm-row.fault .alarm-kind-icon { color: #ff9aa2; background: rgba(177, 48, 57, 0.2); border-color: rgba(239, 106, 114, 0.3); }
+      .alarm-row-copy { min-width: 0; display: grid; gap: 4px; }
+      .alarm-row-copy strong { overflow: hidden; color: #e8f0f5; font-size: 12px; font-weight: 640; text-overflow: ellipsis; white-space: nowrap; }
+      .alarm-row-copy span { overflow: hidden; color: #9eb1be; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+      .alarm-row-copy small { color: #708a9b; font-size: 9px; }
+      .alarm-row-value { display: grid; justify-items: end; gap: 7px; padding-left: 8px; }
+      .alarm-row-value strong { color: #efbd68; font-family: "DIN Alternate", "Avenir Next Condensed", sans-serif; font-size: 14px; white-space: nowrap; }
+      .alarm-row.fault .alarm-row-value strong { color: #ff9aa2; }
+      .alarm-row-value span { padding: 2px 6px; font-size: 9px; border-radius: 2px; white-space: nowrap; }
+      .alarm-row-value span.fresh { color: #60dcb5; background: rgba(15, 133, 99, 0.17); }
+      .alarm-row-value span.stale { color: #d8ae68; background: rgba(133, 91, 28, 0.2); }
+      .alarm-row.stale { opacity: 0.62; }
+
+      .alarm-empty {
+        height: 100%;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 7px;
+        color: #728b9c;
+        text-align: center;
+      }
+
+      .alarm-empty strong { color: #aebfca; font-size: 13px; }
+      .alarm-empty span { font-size: 10px; }
+      .alarm-empty.waiting svg { color: #7e95a5; }
+      .alarm-empty-check { width: 28px; height: 28px; display: grid; place-items: center; color: #59ddb4; font-size: 15px !important; background: rgba(15, 133, 99, 0.18); border: 1px solid rgba(81, 227, 181, 0.24); border-radius: 50%; }
 
       .prototype-controls.device-controls {
         top: 98px !important;

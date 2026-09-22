@@ -27,3 +27,11 @@ _Avoid_: Telemetry History, Historical Record
 **Device State**:
 设备在生产过程中的运行语义状态，例如停止、运行、故障或维护；它独立于 WebSocket 连接状态和 Data Freshness。
 _Avoid_: Connection State, Online Status, Data Freshness
+
+**Active Alarm**:
+最近一次可信观测触发、且尚未收到明确恢复观测的 Alarm Condition；Data Freshness 过期不会自动清除它，它也不是可查询的告警历史记录。
+_Avoid_: Alarm History, Alarm Event Log
+
+**Alarm Condition**:
+由 Data Point 阈值越界或 Device State 故障定义的异常判定；相同 `dataKey`、类型和阈值或状态码表示同一个条件。
+_Avoid_: Alarm Record, Notification

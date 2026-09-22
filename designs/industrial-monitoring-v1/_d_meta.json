@@ -9,7 +9,7 @@
           "path": "industrial-editor.html",
           "createdAt": "2026-09-18T00:54:59.299Z",
           "status": "approved",
-          "subtitle": "设备状态组件",
+          "subtitle": "活动告警列表组件",
           "viewport": {
             "width": 1440,
             "height": 960
@@ -19,5 +19,5 @@
     }
   },
   "createdAt": "2026-09-12T02:22:21.715Z",
-  "updatedAt": "2026-09-18T00:58:59.651Z"
+  "updatedAt": "2026-09-22T09:24:18.749Z"
 }
