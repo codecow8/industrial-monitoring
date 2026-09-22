@@ -1,6 +1,6 @@
 # Industrial Monitoring
 
-工业智能监控与巡检平台。编辑器通过统一 `PageSchema` 配置指标卡，运行态使用同一个 Renderer 和组件注册表读取并渲染；草稿通过 FastAPI 校验并保存到 PostgreSQL，发布后生成不可变版本供运行态读取。
+工业智能监控与巡检平台。编辑器通过统一 `PageSchema` 配置指标卡、实时趋势图和设备状态组件，运行态使用同一个 Renderer 和组件注册表读取并渲染；草稿通过 FastAPI 校验并保存到 PostgreSQL，发布后生成不可变版本供运行态读取。
 
 ## Task 1 范围
 
@@ -13,7 +13,7 @@
 
 Task 1 不包含后端、WebSocket、ECharts、Electron、小程序或 Agent。
 
-Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task 3 已完成实时趋势图切片。Electron、小程序、真实设备、持久化历史曲线和 Agent 仍不在当前范围内。
+Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task 3 已完成实时趋势图、组件右键删除和设备状态三个切片。告警列表、多端、真实设备、持久化历史曲线和 Agent 仍不在当前实现范围内。
 
 ## 目录职责
 
@@ -21,16 +21,16 @@ Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task
 apps/web                 编辑器与运行态入口
 packages/schema          PageSchema 与运行时校验
 packages/renderer-core   不依赖 Pinia 的 DOM Renderer
-packages/components-web  指标卡和 Web 组件注册表
+packages/components-web  指标卡、实时趋势图、设备状态和 Web 组件注册表
 packages/telemetry-client WebSocket 会话、帧合并、过期与重连状态
 services/api             FastAPI 页面/遥测接口与 Alembic 迁移
-services/simulator       每秒推送确定性温度序列的独立 Python 进程
+services/simulator       每秒推送确定性温度和设备状态序列的独立 Python 进程
 fixtures                 前后端共享的 PageSchema 合同和样例
 ```
 
 ## UI 设计流程
 
-版本化 HTML 原型是 UI 设计源，Vue 是可执行实现。所有 UI 变更（包括右键菜单、按钮和间距微调）都必须先产出新的 HTML 原型版本并获得明确评审通过，再进入 Vue 实现。详见 [UI Design Workflow](./docs/design-workflow.md)。
+单一可变 HTML 原型是 UI 设计源，Vue 是可执行实现。所有 UI 变更（包括右键菜单、按钮和间距微调）都先原地更新 `industrial-editor.html` 并获得明确评审通过，再进入 Vue 实现。历史由 Git 保留，不在工作树中复制原型版本。详见 [UI Design Workflow](./docs/design-workflow.md)。
 
 ## 当前接口
 
@@ -82,7 +82,7 @@ corepack pnpm@12.4.1 dev
 corepack pnpm@12.4.1 dev:simulator
 ```
 
-默认地址：`http://127.0.0.1:5173/editor/demo`。Vite 将 `/api` 和 `/ws` 代理到 `http://127.0.0.1:8000`。发布 `demo` 页后打开运行态，指标卡会按 `68.4 → 72.0 → 78.5 → 81.2 → 83.0 → 79.0 → 74.0` 循环更新。
+默认地址：`http://127.0.0.1:5173/editor/demo`。Vite 将 `/api` 和 `/ws` 代理到 `http://127.0.0.1:8000`。发布 `demo` 页后打开运行态，指标卡会按 `68.4 → 72.0 → 78.5 → 81.2 → 83.0 → 79.0 → 74.0` 循环更新，设备状态会按“运行 → 维护 → 运行 → 故障 → 停止 → 运行”循环更新。
 
 ## 验证
 

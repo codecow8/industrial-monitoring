@@ -23,3 +23,7 @@ _Avoid_: Online status, connection status
 **Trend Sample**:
 当前运行会话中按固定时间间隔记录的 Data Point 观测值，用于展示短时趋势；它不是可持久化查询的历史数据。
 _Avoid_: Telemetry History, Historical Record
+
+**Device State**:
+设备在生产过程中的运行语义状态，例如停止、运行、故障或维护；它独立于 WebSocket 连接状态和 Data Freshness。
+_Avoid_: Connection State, Online Status, Data Freshness

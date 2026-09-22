@@ -12,10 +12,13 @@ const props = defineProps<{
 }>();
 
 const previewPoint: DataPointView = { value: 68.4, freshness: "fresh", ageMs: 0 };
+const previewDeviceState: DataPointView = { value: 1, freshness: "fresh", ageMs: 0 };
 const waitingPoint: DataPointView = { value: null, freshness: "waiting", ageMs: null };
 
 function dataPointFor(node: ComponentNode): DataPointView {
-  if (props.dataPoints === undefined) return previewPoint;
+  if (props.dataPoints === undefined) {
+    return node.type === "device-state" ? previewDeviceState : previewPoint;
+  }
   return props.dataPoints[node.props.dataKey] ?? waitingPoint;
 }
 </script>

@@ -6,6 +6,7 @@ import {
   isPageSchema,
   validatePageSchema,
   type ComponentNode,
+  type DeviceStateNode,
   type MetricCardNode,
   type PageSchema,
   type TrendChartNode,
@@ -52,7 +53,14 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     dirty.value = false;
   }
 
-  type EditableProps = TrendChartNode["props"] & { deviceName?: string };
+  type EditableProps = {
+    deviceName?: string;
+    title?: string;
+    dataKey?: string;
+    unit?: string;
+    precision?: number;
+    alarmThreshold?: number;
+  };
 
   function updateSelectedProps(patch: Partial<EditableProps>): void {
     if (!selectedNode.value) return;
@@ -61,9 +69,17 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     if (!node) return;
     if (node.type === "metric-card") {
       node.props = { ...node.props, ...patch } as MetricCardNode["props"];
-    } else {
+    } else if (node.type === "trend-chart") {
       const { deviceName: _deviceName, ...sharedPatch } = patch;
       node.props = { ...node.props, ...sharedPatch };
+    } else {
+      const {
+        unit: _unit,
+        precision: _precision,
+        alarmThreshold: _alarmThreshold,
+        ...deviceStatePatch
+      } = patch;
+      node.props = { ...node.props, ...deviceStatePatch };
     }
     record(next);
   }
@@ -91,6 +107,29 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     next.components.push(trendChart);
     record(next);
     selectedId.value = trendChart.id;
+  }
+
+  function addDeviceState(): void {
+    const existing = schema.value.components.find((node) => node.type === "device-state");
+    if (existing) {
+      selectedId.value = existing.id;
+      return;
+    }
+    const next = clonePageSchema(schema.value);
+    const deviceState: DeviceStateNode = {
+      id: "state-pump-01",
+      type: "device-state",
+      position: { x: 795, y: 250 },
+      size: { width: 300, height: 180 },
+      props: {
+        deviceName: "1号冷却泵",
+        title: "运行状态",
+        dataKey: "pump1.operating_state",
+      },
+    };
+    next.components.push(deviceState);
+    record(next);
+    selectedId.value = deviceState.id;
   }
 
   function removeComponent(componentId: string): void {
@@ -152,6 +191,7 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     save,
     updateSelectedProps,
     addTrendChart,
+    addDeviceState,
     removeComponent,
     updateSelectedGeometry,
     importFromText,

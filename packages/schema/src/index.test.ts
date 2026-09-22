@@ -47,4 +47,59 @@ describe("PageSchema", () => {
     expect(candidate.version).toBe("1.0.0");
     expect(validatePageSchema(candidate).valid).toBe(true);
   });
+
+  it("accepts a device state without changing the page schema version", () => {
+    const candidate = createSeedPageSchema() as unknown as {
+      version: string;
+      components: unknown[];
+    };
+    candidate.components.push({
+      id: "state-pump-01",
+      type: "device-state",
+      position: { x: 795, y: 250 },
+      size: { width: 300, height: 180 },
+      props: {
+        deviceName: "1号冷却泵",
+        title: "运行状态",
+        dataKey: "pump1.operating_state",
+      },
+    });
+
+    expect(candidate.version).toBe("1.0.0");
+    expect(validatePageSchema(candidate).valid).toBe(true);
+  });
+
+  it("rejects a device state with an empty required property", () => {
+    const candidate = createSeedPageSchema() as unknown as { components: unknown[] };
+    candidate.components.push({
+      id: "state-pump-01",
+      type: "device-state",
+      position: { x: 795, y: 250 },
+      size: { width: 300, height: 180 },
+      props: {
+        deviceName: "1号冷却泵",
+        title: "",
+        dataKey: "pump1.operating_state",
+      },
+    });
+
+    expect(validatePageSchema(candidate).valid).toBe(false);
+  });
+
+  it("rejects a device state too small to display its status", () => {
+    const candidate = createSeedPageSchema() as unknown as { components: unknown[] };
+    candidate.components.push({
+      id: "state-pump-01",
+      type: "device-state",
+      position: { x: 795, y: 250 },
+      size: { width: 200, height: 120 },
+      props: {
+        deviceName: "1号冷却泵",
+        title: "运行状态",
+        dataKey: "pump1.operating_state",
+      },
+    });
+
+    expect(validatePageSchema(candidate).valid).toBe(false);
+  });
 });

@@ -222,3 +222,49 @@ test("右键菜单可删除组件并通过撤销恢复", async ({ page }) => {
   await page.getByRole("button", { name: "撤销" }).click();
   await expect(page.getByTestId("metric-card")).toBeVisible();
 });
+
+test("添加并发布设备状态组件后显示实时状态和数据过期", async ({ page, request }) => {
+  const pageId = `device-state-${Date.now()}`;
+  const dataKey = `pump-${Date.now()}.operating_state`;
+  await page.goto(`/editor/${pageId}`);
+  await expect(page.locator('main[aria-busy="false"]')).toBeVisible();
+
+  await page.getByRole("button", { name: "设备状态" }).click();
+  await page.getByRole("button", { name: "设备状态" }).click();
+  await expect(page.getByTestId("device-state")).toHaveCount(1);
+  await page.getByLabel("设备名称").fill("2号冷却泵");
+  await page.getByLabel("组件标题").fill("生产状态");
+  await page.getByLabel("数据键").fill(dataKey);
+  await page.getByRole("button", { name: "发布版本" }).click();
+  await page.getByRole("button", { name: "预览运行态" }).click();
+
+  const state = page.getByTestId("device-state");
+  await expect(state).toContainText("2号冷却泵");
+  await expect(state).toContainText("生产状态");
+  await expect(state).toContainText("等待设备状态");
+
+  await request.post("http://127.0.0.1:8000/api/telemetry", {
+    data: {
+      timestamp: "2026-09-18T10:00:00Z",
+      values: { [dataKey]: 1 },
+    },
+  });
+  await expect(state).toContainText("运行");
+
+  await request.post("http://127.0.0.1:8000/api/telemetry", {
+    data: {
+      timestamp: "2026-09-18T10:00:01Z",
+      values: { [dataKey]: 2 },
+    },
+  });
+  await expect(state).toContainText("故障");
+
+  await request.post("http://127.0.0.1:8000/api/telemetry", {
+    data: {
+      timestamp: "2026-09-18T10:00:02Z",
+      values: { [dataKey]: 9 },
+    },
+  });
+  await expect(state).toContainText("未知状态 · 状态码 9");
+  await expect(state).toContainText("状态数据已过期", { timeout: 6000 });
+});

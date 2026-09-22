@@ -6,10 +6,16 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "test": "vitest run"
+  },
   "dependencies": {
     "@industrial/renderer-core": "workspace:*",
     "@industrial/schema": "workspace:*",
     "echarts": "6.1.0",
     "vue": "3.5.42"
+  },
+  "devDependencies": {
+    "vitest": "5.0.0"
   }
 }

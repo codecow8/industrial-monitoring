@@ -48,7 +48,7 @@ const palette = [
   { name: "指标卡", icon: "chart" as const, active: true, action: undefined },
   { name: "文本", icon: "text" as const, active: false },
   { name: "折线图", icon: "line" as const, active: true, action: () => { store.addTrendChart(); syncTarget(); } },
-  { name: "设备状态", icon: "device" as const, active: false },
+  { name: "设备状态", icon: "device" as const, active: true, action: () => { store.addDeviceState(); syncTarget(); } },
   { name: "告警列表", icon: "bell" as const, active: false },
 ];
 
@@ -317,27 +317,27 @@ function onResizeEnd(): void {
         <section v-if="store.selectedNode" class="inspector-section">
           <div class="section-heading"><strong>基础属性</strong><code>{{ store.selectedNode.type }}</code></div>
           <div class="field-list">
-            <label v-if="store.selectedNode.type === 'metric-card'" class="field-row">
+            <label v-if="store.selectedNode.type === 'metric-card' || store.selectedNode.type === 'device-state'" class="field-row">
               <span>设备名称</span>
               <el-input aria-label="设备名称" :model-value="store.selectedNode.props.deviceName" @update:model-value="updateTextProp('deviceName', $event)" />
             </label>
             <label class="field-row">
-              <span>{{ store.selectedNode.type === "metric-card" ? "指标标题" : "图表标题" }}</span>
-              <el-input :aria-label="store.selectedNode.type === 'metric-card' ? '指标标题' : '图表标题'" :model-value="store.selectedNode.props.title" @update:model-value="updateTextProp('title', $event)" />
+              <span>{{ store.selectedNode.type === "metric-card" ? "指标标题" : store.selectedNode.type === "device-state" ? "组件标题" : "图表标题" }}</span>
+              <el-input :aria-label="store.selectedNode.type === 'metric-card' ? '指标标题' : store.selectedNode.type === 'device-state' ? '组件标题' : '图表标题'" :model-value="store.selectedNode.props.title" @update:model-value="updateTextProp('title', $event)" />
             </label>
             <label class="field-row">
               <span>数据键</span>
               <el-input aria-label="数据键" :model-value="store.selectedNode.props.dataKey" @update:model-value="updateTextProp('dataKey', $event)" />
             </label>
-            <label class="field-row">
+            <label v-if="store.selectedNode.type !== 'device-state'" class="field-row">
               <span>单位</span>
               <el-input aria-label="单位" :model-value="store.selectedNode.props.unit" @update:model-value="updateTextProp('unit', $event)" />
             </label>
-            <label class="field-row">
+            <label v-if="store.selectedNode.type !== 'device-state'" class="field-row">
               <span>小数位</span>
               <el-input-number aria-label="小数位" :model-value="store.selectedNode.props.precision" :min="0" :max="3" controls-position="right" @update:model-value="updateNumberProp('precision', $event)" />
             </label>
-            <label class="field-row">
+            <label v-if="store.selectedNode.type !== 'device-state'" class="field-row">
               <span>告警阈值</span>
               <el-input-number aria-label="告警阈值" :model-value="store.selectedNode.props.alarmThreshold" controls-position="right" @update:model-value="updateNumberProp('alarmThreshold', $event)" />
             </label>
