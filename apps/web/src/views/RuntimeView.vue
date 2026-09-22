@@ -33,10 +33,10 @@ const dataPoints = computed<Record<string, DataPointView>>(() => {
   telemetryRevision.value;
   if (!schema.value || !telemetrySession) return {};
   return Object.fromEntries(
-    schema.value.components.map((node) => [
-      node.props.dataKey,
-      telemetrySession?.point(node.props.dataKey),
-    ]),
+    schema.value.components.flatMap((node) => {
+      if (!("dataKey" in node.props)) return [];
+      return [[node.props.dataKey, telemetrySession?.point(node.props.dataKey)]];
+    }),
   ) as Record<string, DataPointView>;
 });
 
@@ -44,10 +44,11 @@ const trendSamples = computed<Record<string, readonly TrendSampleView[]>>(() => 
   telemetryRevision.value;
   if (!schema.value || !telemetrySession) return {};
   return Object.fromEntries(
-    schema.value.components.map((node) => [
-      node.props.dataKey,
-      telemetrySession?.trendSamples(node.props.dataKey) ?? [],
-    ]),
+    schema.value.components.flatMap((node) =>
+      node.type === "trend-chart"
+        ? [[node.props.dataKey, telemetrySession?.trendSamples(node.props.dataKey) ?? []]]
+        : [],
+    ),
   );
 });
 

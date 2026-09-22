@@ -2,6 +2,12 @@ import type { Component } from "vue";
 import type { ComponentNode, ComponentType } from "@industrial/schema";
 
 export { default as PageRenderer } from "./PageRenderer.vue";
+export {
+  resolveActiveAlarms,
+  type ActiveAlarmKind,
+  type ActiveAlarmSummary,
+  type ActiveAlarmView,
+} from "./activeAlarms";
 
 export type ComponentRegistry = Record<ComponentType, Component>;
 

@@ -5,6 +5,7 @@ import {
   createSeedPageSchema,
   isPageSchema,
   validatePageSchema,
+  type AlarmListNode,
   type ComponentNode,
   type DeviceStateNode,
   type MetricCardNode,
@@ -72,7 +73,7 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     } else if (node.type === "trend-chart") {
       const { deviceName: _deviceName, ...sharedPatch } = patch;
       node.props = { ...node.props, ...sharedPatch };
-    } else {
+    } else if (node.type === "device-state") {
       const {
         unit: _unit,
         precision: _precision,
@@ -80,6 +81,8 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
         ...deviceStatePatch
       } = patch;
       node.props = { ...node.props, ...deviceStatePatch };
+    } else if (patch.title !== undefined) {
+      node.props = { title: patch.title };
     }
     record(next);
   }
@@ -130,6 +133,25 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     next.components.push(deviceState);
     record(next);
     selectedId.value = deviceState.id;
+  }
+
+  function addAlarmList(): void {
+    const existing = schema.value.components.find((node) => node.type === "alarm-list");
+    if (existing) {
+      selectedId.value = existing.id;
+      return;
+    }
+    const next = clonePageSchema(schema.value);
+    const alarmList: AlarmListNode = {
+      id: "alarm-list-main",
+      type: "alarm-list",
+      position: { x: 830, y: 370 },
+      size: { width: 520, height: 300 },
+      props: { title: "活动告警" },
+    };
+    next.components.push(alarmList);
+    record(next);
+    selectedId.value = alarmList.id;
   }
 
   function removeComponent(componentId: string): void {
@@ -192,6 +214,7 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     updateSelectedProps,
     addTrendChart,
     addDeviceState,
+    addAlarmList,
     removeComponent,
     updateSelectedGeometry,
     importFromText,

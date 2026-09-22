@@ -268,3 +268,54 @@ test("添加并发布设备状态组件后显示实时状态和数据过期", as
   await expect(state).toContainText("未知状态 · 状态码 9");
   await expect(state).toContainText("状态数据已过期", { timeout: 6000 });
 });
+
+test("添加并发布告警列表后聚合活动告警并在恢复后清空", async ({ page, request }) => {
+  const pageId = `alarm-list-${Date.now()}`;
+  const temperatureKey = `pump-${Date.now()}.outlet_temp`;
+  const stateKey = `pump-${Date.now()}.operating_state`;
+  await page.goto(`/editor/${pageId}`);
+  await expect(page.locator('main[aria-busy="false"]')).toBeVisible();
+
+  await page.getByLabel("数据键").fill(temperatureKey);
+  await page.getByRole("button", { name: "折线图" }).click();
+  await page.getByLabel("数据键").fill(temperatureKey);
+  await page.getByRole("button", { name: "设备状态" }).click();
+  await page.getByLabel("数据键").fill(stateKey);
+  await page.getByRole("button", { name: "告警列表" }).click();
+  await page.getByRole("button", { name: "告警列表" }).click();
+
+  await expect(page.getByTestId("alarm-list")).toHaveCount(1);
+  await page.getByLabel("组件标题").fill("当前活动告警");
+  await page.getByRole("button", { name: "发布版本" }).click();
+  await expect(page.getByRole("button", { name: "发布版本" })).toBeEnabled();
+  await page.getByRole("button", { name: "预览运行态" }).click();
+  await expect(page).toHaveURL(new RegExp(`/runtime/${pageId}$`));
+
+  const alarmList = page.getByTestId("alarm-list");
+  await expect(alarmList).toContainText("当前活动告警");
+  await expect(alarmList).toContainText("等待设备数据");
+
+  await request.post("http://127.0.0.1:8000/api/telemetry", {
+    data: {
+      timestamp: "2026-09-22T10:00:00Z",
+      values: { [temperatureKey]: 83, [stateKey]: 2 },
+    },
+  });
+  await expect(alarmList).toContainText("2 条");
+  const rows = alarmList.locator(".alarm-row");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText("设备故障");
+  await expect(rows.nth(1)).toContainText("出口温度超过告警阈值");
+
+  await expect(rows.nth(0)).toContainText("数据已过期", { timeout: 6000 });
+  await expect(rows.nth(1)).toContainText("数据已过期");
+
+  await request.post("http://127.0.0.1:8000/api/telemetry", {
+    data: {
+      timestamp: "2026-09-22T10:00:06Z",
+      values: { [temperatureKey]: 68.4, [stateKey]: 1 },
+    },
+  });
+  await expect(alarmList).toContainText("当前无活动告警");
+  await expect(rows).toHaveCount(0);
+});

@@ -102,4 +102,47 @@ describe("PageSchema", () => {
 
     expect(validatePageSchema(candidate).valid).toBe(false);
   });
+
+  it("accepts an alarm list without changing the page schema version", () => {
+    const candidate = createSeedPageSchema() as unknown as {
+      version: string;
+      components: unknown[];
+    };
+    candidate.components.push({
+      id: "alarm-list-main",
+      type: "alarm-list",
+      position: { x: 830, y: 370 },
+      size: { width: 520, height: 300 },
+      props: { title: "活动告警" },
+    });
+
+    expect(candidate.version).toBe("1.0.0");
+    expect(validatePageSchema(candidate).valid).toBe(true);
+  });
+
+  it("rejects an alarm list with an empty title", () => {
+    const candidate = createSeedPageSchema() as unknown as { components: unknown[] };
+    candidate.components.push({
+      id: "alarm-list-main",
+      type: "alarm-list",
+      position: { x: 830, y: 370 },
+      size: { width: 520, height: 300 },
+      props: { title: "" },
+    });
+
+    expect(validatePageSchema(candidate).valid).toBe(false);
+  });
+
+  it("rejects an alarm list too small to keep rows readable", () => {
+    const candidate = createSeedPageSchema() as unknown as { components: unknown[] };
+    candidate.components.push({
+      id: "alarm-list-main",
+      type: "alarm-list",
+      position: { x: 830, y: 370 },
+      size: { width: 360, height: 180 },
+      props: { title: "活动告警" },
+    });
+
+    expect(validatePageSchema(candidate).valid).toBe(false);
+  });
 });

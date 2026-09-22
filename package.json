@@ -14,7 +14,7 @@
     "schema:export": "pnpm --filter @industrial/schema export:json-schema",
     "build": "pnpm --filter @industrial/web build",
     "typecheck": "pnpm --filter @industrial/web typecheck",
-    "test": "pnpm --filter @industrial/schema test && pnpm --filter @industrial/telemetry-client test && pnpm --filter @industrial/components-web test",
+    "test": "pnpm --filter @industrial/schema test && pnpm --filter @industrial/telemetry-client test && pnpm --filter @industrial/renderer-core test && pnpm --filter @industrial/components-web test",
     "test:api": "cd services/api && uv run --python 3.12 pytest",
     "test:e2e": "playwright test"
   },

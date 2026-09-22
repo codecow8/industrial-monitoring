@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { PageSchema } from "@industrial/schema";
 import type { ComponentNode } from "@industrial/schema";
 import type { ComponentRegistry, DataPointView, TrendSampleView } from "./index";
-import { componentNodeStyle } from "./index";
+import { componentNodeStyle, resolveActiveAlarms } from "./index";
 
 const props = defineProps<{
   schema: PageSchema;
@@ -15,7 +16,27 @@ const previewPoint: DataPointView = { value: 68.4, freshness: "fresh", ageMs: 0 
 const previewDeviceState: DataPointView = { value: 1, freshness: "fresh", ageMs: 0 };
 const waitingPoint: DataPointView = { value: null, freshness: "waiting", ageMs: null };
 
+const alarmSummary = computed(() => {
+  if (props.dataPoints !== undefined) {
+    return resolveActiveAlarms(props.schema, props.dataPoints);
+  }
+  const previewAlarmPoints: Record<string, DataPointView> = {};
+  for (const node of props.schema.components) {
+    if (node.type === "metric-card" || node.type === "trend-chart") {
+      previewAlarmPoints[node.props.dataKey] = {
+        value: node.props.alarmThreshold + 3,
+        freshness: "fresh",
+        ageMs: 0,
+      };
+    } else if (node.type === "device-state") {
+      previewAlarmPoints[node.props.dataKey] = { value: 2, freshness: "fresh", ageMs: 0 };
+    }
+  }
+  return resolveActiveAlarms(props.schema, previewAlarmPoints);
+});
+
 function dataPointFor(node: ComponentNode): DataPointView {
+  if (node.type === "alarm-list") return waitingPoint;
   if (props.dataPoints === undefined) {
     return node.type === "device-state" ? previewDeviceState : previewPoint;
   }
@@ -43,8 +64,10 @@ function dataPointFor(node: ComponentNode): DataPointView {
       <component
         :is="registry[node.type]"
         :node="node"
-        :data-point="dataPointFor(node)"
+        :data-point="node.type === 'alarm-list' ? undefined : dataPointFor(node)"
         :trend-samples="node.type === 'trend-chart' ? (trendSamples?.[node.props.dataKey] ?? []) : undefined"
+        :alarm-summary="node.type === 'alarm-list' ? alarmSummary : undefined"
+        :example="node.type === 'alarm-list' && dataPoints === undefined"
       />
     </div>
   </div>

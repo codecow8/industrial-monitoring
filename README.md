@@ -1,6 +1,6 @@
 # Industrial Monitoring
 
-工业智能监控与巡检平台。编辑器通过统一 `PageSchema` 配置指标卡、实时趋势图和设备状态组件，运行态使用同一个 Renderer 和组件注册表读取并渲染；草稿通过 FastAPI 校验并保存到 PostgreSQL，发布后生成不可变版本供运行态读取。
+工业智能监控与巡检平台。编辑器通过统一 `PageSchema` 配置指标卡、实时趋势图、设备状态和活动告警列表，运行态使用同一个 Renderer 和组件注册表读取并渲染；草稿通过 FastAPI 校验并保存到 PostgreSQL，发布后生成不可变版本供运行态读取。
 
 ## Task 1 范围
 
@@ -13,7 +13,7 @@
 
 Task 1 不包含后端、WebSocket、ECharts、Electron、小程序或 Agent。
 
-Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task 3 已完成实时趋势图、组件右键删除和设备状态三个切片。告警列表、多端、真实设备、持久化历史曲线和 Agent 仍不在当前实现范围内。
+Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task 3 已完成实时趋势图、组件右键删除、设备状态和活动告警列表四个切片。多端、真实设备、持久化历史曲线和 Agent 仍不在当前实现范围内。
 
 ## 目录职责
 
@@ -21,7 +21,7 @@ Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task
 apps/web                 编辑器与运行态入口
 packages/schema          PageSchema 与运行时校验
 packages/renderer-core   不依赖 Pinia 的 DOM Renderer
-packages/components-web  指标卡、实时趋势图、设备状态和 Web 组件注册表
+packages/components-web  指标卡、实时趋势图、设备状态、活动告警列表和 Web 组件注册表
 packages/telemetry-client WebSocket 会话、帧合并、过期与重连状态
 services/api             FastAPI 页面/遥测接口与 Alembic 迁移
 services/simulator       每秒推送确定性温度和设备状态序列的独立 Python 进程

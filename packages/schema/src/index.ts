@@ -69,6 +69,25 @@ export const deviceStateNodeSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const alarmListNodeSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    type: Type.Literal("alarm-list"),
+    position: Type.Object({
+      x: Type.Number(),
+      y: Type.Number(),
+    }),
+    size: Type.Object({
+      width: Type.Number({ minimum: 420 }),
+      height: Type.Number({ minimum: 220 }),
+    }),
+    props: Type.Object({
+      title: Type.String({ minLength: 1 }),
+    }),
+  },
+  { additionalProperties: false },
+);
+
 export const pageSchemaModel = Type.Object(
   {
     version: Type.Literal("1.0.0"),
@@ -80,7 +99,12 @@ export const pageSchemaModel = Type.Object(
       background: Type.String(),
     }),
     components: Type.Array(
-      Type.Union([metricCardNodeSchema, trendChartNodeSchema, deviceStateNodeSchema]),
+      Type.Union([
+        metricCardNodeSchema,
+        trendChartNodeSchema,
+        deviceStateNodeSchema,
+        alarmListNodeSchema,
+      ]),
     ),
   },
   { $id: "PageSchemaV1", additionalProperties: false },
@@ -89,6 +113,7 @@ export const pageSchemaModel = Type.Object(
 export type MetricCardNode = Type.Static<typeof metricCardNodeSchema>;
 export type TrendChartNode = Type.Static<typeof trendChartNodeSchema>;
 export type DeviceStateNode = Type.Static<typeof deviceStateNodeSchema>;
+export type AlarmListNode = Type.Static<typeof alarmListNodeSchema>;
 export type PageSchema = Type.Static<typeof pageSchemaModel>;
 export type ComponentNode = PageSchema["components"][number];
 export type ComponentType = ComponentNode["type"];
