@@ -1,9 +1,13 @@
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+from sqlalchemy import delete
+from starlette.concurrency import run_in_threadpool
 
 from .database import SessionFactory
+from .models import TelemetryObservation
 from .repository import get_published
 
 
@@ -76,6 +80,25 @@ class TelemetryHub:
 hub = TelemetryHub()
 
 
+def record_telemetry(telemetry: TelemetryInput) -> None:
+    received_at = datetime.now(UTC)
+    with SessionFactory.begin() as session:
+        session.execute(
+            delete(TelemetryObservation).where(
+                TelemetryObservation.received_at < received_at - timedelta(hours=24)
+            )
+        )
+        session.add_all(
+            TelemetryObservation(
+                data_key=data_key,
+                value=value,
+                source_timestamp=telemetry.timestamp,
+                received_at=received_at,
+            )
+            for data_key, value in telemetry.values.items()
+        )
+
+
 def published_data_keys(page_key: str) -> set[str] | None:
     with SessionFactory() as session:
         published = get_published(session, page_key)
@@ -91,6 +114,7 @@ def published_data_keys(page_key: str) -> set[str] | None:
 
 @router.post("/api/telemetry", status_code=202)
 async def receive_telemetry(telemetry: TelemetryInput) -> dict[str, str]:
+    await run_in_threadpool(record_telemetry, telemetry)
     await hub.publish(telemetry)
     return {"status": "accepted"}
 

@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @industrial/web dev",
+    "dev:prototype": "python3 -m http.server 4311 --bind 127.0.0.1 --directory designs",
     "dev:electron": "pnpm --filter @industrial/electron dev",
     "dev:api": "cd services/api && uv run --python 3.12 uvicorn industrial_api.main:app --reload --host 127.0.0.1 --port 8000",
     "dev:simulator": "python3 services/simulator/simulator.py",

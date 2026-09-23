@@ -16,6 +16,10 @@ _Avoid_: Increment, delta value, full snapshot
 运行态首次订阅后收到的全部相关 Data Point 当前值，用作后续 Telemetry Update 的合并基线。
 _Avoid_: Telemetry Update, history
 
+**Telemetry Observation**:
+服务端收到的一项 Data Point 数值及其接收时间，作为可查询的告警证据；它不是页面会话中的 Trend Sample。
+_Avoid_: Telemetry Update, Telemetry Snapshot, Trend Sample
+
 **Data Freshness**:
 Data Point 是否在预期时间内收到过新 Telemetry Update 的状态，独立于 WebSocket 连接是否仍然存在。
 _Avoid_: Online status, connection status
@@ -35,3 +39,7 @@ _Avoid_: Alarm History, Alarm Event Log
 **Alarm Condition**:
 由 Data Point 阈值越界或 Device State 故障定义的异常判定；相同 `dataKey`、类型和阈值或状态码表示同一个条件。
 _Avoid_: Alarm Record, Notification
+
+**Alarm Transition**:
+相邻 Telemetry Observation 证明同一 Alarm Condition 从未触发变为触发，或从触发变为恢复的变化；缺少前一项观测时无法确定转折时间。
+_Avoid_: Alarm History, Alarm Acknowledgement

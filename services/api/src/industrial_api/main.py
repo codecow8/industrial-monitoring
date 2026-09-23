@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from .database import get_session
+from .evidence import router as evidence_router
 from .repository import (
     get_draft,
     get_page_version,
@@ -24,6 +25,7 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 app.include_router(telemetry_router)
+app.include_router(evidence_router)
 
 
 @app.get("/api/health")

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Identity, Integer, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Identity, Index, Integer, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,3 +48,22 @@ class PageVersion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class TelemetryObservation(Base):
+    __tablename__ = "telemetry_observations"
+    __table_args__ = (
+        Index(
+            "ix_telemetry_observations_data_key_received_at_id",
+            "data_key", "received_at", "id",
+        ),
+        Index("ix_telemetry_observations_received_at", "received_at"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger, Identity(always=True), primary_key=True
+    )
+    data_key: Mapped[str] = mapped_column(Text, nullable=False)
+    value: Mapped[float] = mapped_column(nullable=False)
+    source_timestamp: Mapped[str] = mapped_column(Text, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

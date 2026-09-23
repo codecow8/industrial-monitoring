@@ -33,6 +33,14 @@ fixtures                 前后端共享的 PageSchema 合同和样例
 
 单一可变 HTML 原型是 UI 设计源，Vue 是可执行实现。所有 UI 变更（包括右键菜单、按钮和间距微调）都先原地更新 `industrial-editor.html` 并获得明确评审通过，再进入 Vue 实现。历史由 Git 保留，不在工作树中复制原型版本。详见 [UI Design Workflow](./docs/design-workflow.md)。
 
+从仓库根目录启动原型：
+
+```bash
+pnpm dev:prototype
+```
+
+打开 `http://127.0.0.1:4311/industrial-monitoring-v1/industrial-editor.html`。原型服务独立于 Vue 开发服务（5173）和 API（8000）；按 `Ctrl+C` 停止。
+
 ## 当前接口
 
 ```text
@@ -42,16 +50,21 @@ POST /api/pages/{page_key}/publish
 GET  /api/pages/{page_key}/published
 GET  /api/pages/{page_key}/versions/{version}
 POST /api/telemetry
+GET  /api/pages/{page_key}/alarm-evidence
 WS   /ws/telemetry/pages/{page_key}
 ```
 
 运行态只读取 `published`，不会直接显示尚未发布的草稿修改。
+
+告警证据接口按已发布页面中的 `kind`（`threshold` / `fault`）、`dataKey`、`start` 和 `end` 查询。阈值告警还需提供 `threshold`。`start`、`end` 使用带时区的 ISO 8601 时间，单次最多 15 分钟和 1000 条观测。响应包含页面发布版本、观测记录 ID、来源时间、服务端接收时间和可由相邻观测证明的触发/恢复转折；查询可跨越发布时间，但当前版本发布前的观测不会按新规则解释。缺少前一条正常观测时，不推断告警起点。模拟遥测在 PostgreSQL 保留 24 小时，并于后续遥测写入时清理过期记录。
 
 ## 环境准备
 
 - Node.js `>=22.12`
 - Python 3.12 与 uv
 - Docker Desktop
+
+仓库通过 `packageManager` 固定 pnpm 12.4.1。启用 Corepack 的 `pnpm` 命令入口后，在仓库内直接使用 `pnpm` 即可自动选择该版本；不需要每次写 `corepack pnpm@12.4.1`。
 
 如果 macOS 可以启动 Docker Desktop、但 Shell 找不到 `docker`，本次机器可临时执行：
 
@@ -62,7 +75,7 @@ export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"
 ## 本地运行
 
 ```bash
-corepack pnpm@12.4.1 install
+pnpm install
 docker compose up -d postgres
 
 cd services/api
@@ -74,13 +87,13 @@ uv run --python 3.12 uvicorn industrial_api.main:app --reload --port 8000
 另开一个终端：
 
 ```bash
-corepack pnpm@12.4.1 dev
+pnpm dev
 ```
 
 再开一个终端启动设备模拟器：
 
 ```bash
-corepack pnpm@12.4.1 dev:simulator
+pnpm dev:simulator
 ```
 
 默认地址：`http://127.0.0.1:5173/editor/demo`。Vite 将 `/api` 和 `/ws` 代理到 `http://127.0.0.1:8000`。发布 `demo` 页后打开运行态，指标卡会按 `68.4 → 72.0 → 78.5 → 81.2 → 83.0 → 79.0 → 74.0` 循环更新，设备状态会按“运行 → 维护 → 运行 → 故障 → 停止 → 运行”循环更新。
@@ -90,15 +103,15 @@ corepack pnpm@12.4.1 dev:simulator
 Electron 复用 `apps/web` 源码，不复制页面组件。FastAPI 和 PostgreSQL 仍作为外部服务运行，先启动后端，再启动桌面应用：
 
 ```bash
-corepack pnpm@12.4.1 dev:api
-corepack pnpm@12.4.1 dev:electron
+pnpm dev:api
+pnpm dev:electron
 ```
 
 生产构建和 macOS arm64 未签名应用：
 
 ```bash
-corepack pnpm@12.4.1 build:electron
-corepack pnpm@12.4.1 package:electron
+pnpm build:electron
+pnpm package:electron
 ```
 
 生成的 `.app` 位于 `apps/electron/release/mac-arm64/`，构建产物不提交 Git。默认连接 `127.0.0.1:8000`；可通过 `INDUSTRIAL_API_ORIGIN` 和 `INDUSTRIAL_WS_ORIGIN` 指向其他外部后端。
@@ -106,11 +119,11 @@ corepack pnpm@12.4.1 package:electron
 ## 验证
 
 ```bash
-corepack pnpm@12.4.1 test
-corepack pnpm@12.4.1 test:api
-corepack pnpm@12.4.1 typecheck
-corepack pnpm@12.4.1 build
-corepack pnpm@12.4.1 build:electron
-corepack pnpm@12.4.1 package:electron
-corepack pnpm@12.4.1 test:e2e
+pnpm test
+pnpm test:api
+pnpm typecheck
+pnpm build
+pnpm build:electron
+pnpm package:electron
+pnpm test:e2e
 ```
