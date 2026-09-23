@@ -53,6 +53,9 @@ const trendSamples = computed<Record<string, readonly TrendSampleView[]>>(() => 
 });
 
 function websocketUrl(pageId: string): string {
+  if (window.industrialDesktop?.wsOrigin) {
+    return `${window.industrialDesktop.wsOrigin}/ws/telemetry/pages/${encodeURIComponent(pageId)}`;
+  }
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}/ws/telemetry/pages/${encodeURIComponent(pageId)}`;
 }

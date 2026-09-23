@@ -2,5 +2,13 @@ packages:
   - "apps/*"
   - "packages/*"
 
+overrides:
+  electron-to-chromium: 1.5.433
+  fs-extra@11.4.1: 11.4.0
+
 allowBuilds:
   "@parcel/watcher": false
+  "@swc/core": true
+  electron: true
+  electron-winstaller: false
+  esbuild: true

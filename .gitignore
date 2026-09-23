@@ -8,6 +8,8 @@ __pycache__/
 playwright-report/
 test-results/
 .playwright-cli/
+/apps/electron/out/
+/apps/electron/release/
 .idea/
 .DS_Store
 *.local

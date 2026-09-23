@@ -13,12 +13,13 @@
 
 Task 1 不包含后端、WebSocket、ECharts、Electron、小程序或 Agent。
 
-Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task 3 已完成实时趋势图、组件右键删除、设备状态和活动告警列表四个切片。多端、真实设备、持久化历史曲线和 Agent 仍不在当前实现范围内。
+Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task 3 已完成实时趋势图、组件右键删除、设备状态、活动告警列表和 Electron 桌面壳。小程序、真实设备、持久化历史曲线和 Agent 仍不在当前实现范围内。
 
 ## 目录职责
 
 ```text
 apps/web                 编辑器与运行态入口
+apps/electron            复用 Web Renderer 的安全 Electron 桌面壳
 packages/schema          PageSchema 与运行时校验
 packages/renderer-core   不依赖 Pinia 的 DOM Renderer
 packages/components-web  指标卡、实时趋势图、设备状态、活动告警列表和 Web 组件注册表
@@ -84,6 +85,24 @@ corepack pnpm@12.4.1 dev:simulator
 
 默认地址：`http://127.0.0.1:5173/editor/demo`。Vite 将 `/api` 和 `/ws` 代理到 `http://127.0.0.1:8000`。发布 `demo` 页后打开运行态，指标卡会按 `68.4 → 72.0 → 78.5 → 81.2 → 83.0 → 79.0 → 74.0` 循环更新，设备状态会按“运行 → 维护 → 运行 → 故障 → 停止 → 运行”循环更新。
 
+## Electron 桌面壳
+
+Electron 复用 `apps/web` 源码，不复制页面组件。FastAPI 和 PostgreSQL 仍作为外部服务运行，先启动后端，再启动桌面应用：
+
+```bash
+corepack pnpm@12.4.1 dev:api
+corepack pnpm@12.4.1 dev:electron
+```
+
+生产构建和 macOS arm64 未签名应用：
+
+```bash
+corepack pnpm@12.4.1 build:electron
+corepack pnpm@12.4.1 package:electron
+```
+
+生成的 `.app` 位于 `apps/electron/release/mac-arm64/`，构建产物不提交 Git。默认连接 `127.0.0.1:8000`；可通过 `INDUSTRIAL_API_ORIGIN` 和 `INDUSTRIAL_WS_ORIGIN` 指向其他外部后端。
+
 ## 验证
 
 ```bash
@@ -91,5 +110,7 @@ corepack pnpm@12.4.1 test
 corepack pnpm@12.4.1 test:api
 corepack pnpm@12.4.1 typecheck
 corepack pnpm@12.4.1 build
+corepack pnpm@12.4.1 build:electron
+corepack pnpm@12.4.1 package:electron
 corepack pnpm@12.4.1 test:e2e
 ```

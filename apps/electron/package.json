@@ -1,0 +1,25 @@
+{
+  "name": "@industrial/electron",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Desktop shell for the Industrial Monitoring editor and runtime",
+  "author": "codecow8",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "pnpm typecheck && electron-vite build",
+    "preview": "electron-vite preview",
+    "package:mac": "pnpm build && electron-builder --mac --dir"
+  },
+  "devDependencies": {
+    "@swc/core": "1.16.2",
+    "@types/node": "24.13.6",
+    "@vitejs/plugin-vue": "6.0.9",
+    "electron": "44.4.3",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.6"
+  }
+}
