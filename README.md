@@ -51,12 +51,18 @@ GET  /api/pages/{page_key}/published
 GET  /api/pages/{page_key}/versions/{version}
 POST /api/telemetry
 GET  /api/pages/{page_key}/alarm-evidence
+GET  /api/pages/{page_key}/alarm-history
+POST /api/pages/{page_key}/alarm-diagnoses
 WS   /ws/telemetry/pages/{page_key}
 ```
 
 运行态只读取 `published`，不会直接显示尚未发布的草稿修改。
 
 告警证据接口按已发布页面中的 `kind`（`threshold` / `fault`）、`dataKey`、`start` 和 `end` 查询。阈值告警还需提供 `threshold`。`start`、`end` 使用带时区的 ISO 8601 时间，单次最多 15 分钟和 1000 条观测。响应包含页面发布版本、观测记录 ID、来源时间、服务端接收时间和可由相邻观测证明的触发/恢复转折；查询可跨越发布时间，但当前版本发布前的观测不会按新规则解释。缺少前一条正常观测时，不推断告警起点。模拟遥测在 PostgreSQL 保留 24 小时，并于后续遥测写入时清理过期记录。
+
+历史告警从当前发布版本内最近 24 小时的观测，配对可证实的触发与恢复；无前态或尚未恢复的告警不伪造成历史记录。运行态“活动告警”卡片的“历史”入口在 0 条活动告警时也可使用。`GET /api/pages/{page_key}/alarm-history` 每次返回最多 100 条，默认 20 条；`offset` 翻页，后续请求传首次响应的 `windowEnd` 作为 `asOf`，防止实时新观测导致翻页重复。面板滚动到末尾时继续加载。
+
+运行态活动告警的“智能分析”调用后端诊断接口。后端会重新校验当前发布版本与近期活动告警，并从 PostgreSQL 查询观测；至少两条选中告警的观测才调用模型，否则返回“证据不足”。默认提供方是 DeepSeek（`deepseek-flash`）；设置 `AI_PROVIDER=openai` 可切换到 OpenAI（默认 `gpt-6-luna`），`AI_MODEL` 可覆盖所选提供方的模型名。后端分别读取 `DEEPSEEK_API_KEY` 和 `OPENAI_API_KEY`；旧的 `OPENAI_DIAGNOSIS_MODEL` 在 OpenAI 模式下仍可用。密钥不要放在 `VITE_` 变量或浏览器中。结果中的引用必须属于本次查询的观测或项目模拟手册；服务不可用时界面会提供重试，不会伪装成分析结论。本功能只用于模拟项目，不提供设备控制建议。
 
 ## 环境准备
 
@@ -77,12 +83,24 @@ export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"
 ```bash
 pnpm install
 docker compose up -d postgres
-
-cd services/api
-uv sync --python 3.12
-uv run --python 3.12 alembic upgrade head
-uv run --python 3.12 uvicorn industrial_api.main:app --reload --port 8000
+pnpm db:migrate
+pnpm dev:api
 ```
+
+`pnpm dev:api` 只启动后端，默认使用 DeepSeek。首次在本机配置密钥时运行下面的命令，按提示输入密钥；它会进入 macOS 钥匙串，不写入项目或命令历史：
+
+```bash
+security add-generic-password -a "$(id -un)" -s industrial-monitoring-deepseek -U -w
+```
+
+此后直接运行 `pnpm dev:api`，启动脚本会在未设置 `DEEPSEEK_API_KEY` 时从钥匙串读取。环境变量优先于钥匙串。切换 OpenAI 或指定 DeepSeek 模型时：
+
+```bash
+AI_PROVIDER=openai pnpm dev:api
+AI_MODEL=deepseek-v4-pro pnpm dev:api
+```
+
+OpenAI 模式的钥匙串名称为 `industrial-monitoring-openai`，首次也可用同样的 `security add-generic-password` 命令保存。非 macOS 或企业部署环境由部署平台提供对应后端环境变量。缺少密钥时其他 API 仍能启动，智能分析会提示未配置。
 
 另开一个终端：
 
@@ -126,4 +144,15 @@ pnpm build
 pnpm build:electron
 pnpm package:electron
 pnpm test:e2e
+pnpm exec playwright test --config playwright.ui.config.ts
+cd services/api && uv run --python 3.12 pytest evals
 ```
+
+真实 DeepSeek 端到端验收默认不会随日常测试运行。确认本地 PostgreSQL 可用、后端进程能读取 `DEEPSEEK_API_KEY` 后，显式运行：
+
+```bash
+pnpm build
+LIVE_MODEL_EVAL=1 pnpm exec playwright test --config playwright.live.config.ts
+```
+
+验收会创建独立的模拟页面和遥测记录，并产生两次真实模型请求：分别分析温度越界和设备故障；另验证单点证据不足与恢复后告警消失。密钥只由后端读取，不写入测试或浏览器。

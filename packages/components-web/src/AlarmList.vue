@@ -6,6 +6,8 @@ defineProps<{
   node: AlarmListNode;
   alarmSummary: ActiveAlarmSummary;
   example?: boolean;
+  onAnalyze?: (alarm: ActiveAlarmView) => void;
+  onHistory?: () => void;
 }>();
 
 function valueText(alarm: ActiveAlarmView): string {
@@ -31,9 +33,12 @@ function freshnessText(alarm: ActiveAlarmView): string {
         <strong>{{ node.props.title }}</strong>
         <span v-if="example" class="alarm-example-badge">示例数据</span>
       </div>
-      <span class="alarm-count" :class="{ active: alarmSummary.alarms.length > 0 }">
-        {{ alarmSummary.alarms.length }} 条
-      </span>
+      <div class="alarm-list-actions">
+        <button v-if="onHistory" class="alarm-history-button" type="button" @click="onHistory">◷ 历史</button>
+        <span class="alarm-count" :class="{ active: alarmSummary.alarms.length > 0 }">
+          {{ alarmSummary.alarms.length }} 条
+        </span>
+      </div>
     </header>
     <div class="alarm-list-body">
       <div v-if="alarmSummary.status === 'waiting'" class="alarm-empty alarm-empty--waiting">
@@ -64,6 +69,7 @@ function freshnessText(alarm: ActiveAlarmView): string {
             <span :class="alarm.freshness === 'stale' ? 'stale' : 'fresh'">
               {{ freshnessText(alarm) }}
             </span>
+            <button v-if="onAnalyze" type="button" class="alarm-analyze-button" @click="onAnalyze(alarm)">✧ 智能分析</button>
           </div>
         </article>
       </div>
@@ -76,6 +82,9 @@ function freshnessText(alarm: ActiveAlarmView): string {
 .alarm-list-header { height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 18px; border-bottom: 1px solid rgba(142, 177, 199, 0.16); }
 .alarm-list-heading { min-width: 0; display: flex; align-items: center; gap: 9px; }
 .alarm-list-heading strong { overflow: hidden; font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.alarm-list-actions { display: flex; align-items: center; gap: 8px; }
+.alarm-history-button { min-height: 25px; padding: 3px 7px; color: #a8cbd9; font-size: 10px; background: rgba(48, 111, 142, 0.17); border: 1px solid rgba(100, 162, 191, 0.29); border-radius: 2px; cursor: pointer; white-space: nowrap; }
+.alarm-history-button:hover, .alarm-history-button:focus-visible { color: #e0f6fb; background: rgba(48, 111, 142, 0.31); border-color: rgba(100, 162, 191, 0.56); outline: none; }
 .alarm-example-badge { padding: 2px 6px; color: #8db8d2; font-size: 9px; background: rgba(50, 116, 153, 0.2); border: 1px solid rgba(102, 164, 198, 0.28); border-radius: 2px; white-space: nowrap; }
 .alarm-count { padding: 3px 7px; color: #8ca1b0; font-size: 10px; background: rgba(95, 119, 136, 0.14); border: 1px solid rgba(121, 151, 171, 0.18); border-radius: 2px; white-space: nowrap; }
 .alarm-count.active { color: #f1c982; background: rgba(155, 101, 23, 0.2); border-color: rgba(234, 167, 60, 0.26); }
@@ -96,6 +105,8 @@ function freshnessText(alarm: ActiveAlarmView): string {
 .alarm-row-value span.fresh { color: #60dcb5; background: rgba(15, 133, 99, 0.17); }
 .alarm-row-value span.stale { color: #d8ae68; background: rgba(133, 91, 28, 0.2); }
 .alarm-row.stale { opacity: 0.62; }
+.alarm-analyze-button { padding: 5px 8px; color: #9fe1ee; font-size: 10px; background: rgba(24, 119, 150, 0.17); border: 1px solid rgba(99, 190, 211, 0.32); border-radius: 3px; cursor: pointer; }
+.alarm-analyze-button:hover, .alarm-analyze-button:focus-visible { color: #fff; background: rgba(24, 119, 150, 0.35); outline: none; }
 .alarm-empty { height: 100%; display: grid; place-content: center; justify-items: center; gap: 7px; color: #728b9c; text-align: center; }
 .alarm-empty strong { color: #aebfca; font-size: 13px; }
 .alarm-empty span { font-size: 10px; }

@@ -38,8 +38,11 @@ test("编辑属性后发布并通过同一 Schema 进入运行态", async ({ pag
 });
 
 test("拖动和缩放会更新 PageSchema 几何信息", async ({ page }) => {
-  await page.goto("/editor/demo");
+  const pageId = `geometry-browser-${Date.now()}`;
+  await page.goto(`/editor/${pageId}`);
   await expect(page.locator('main[aria-busy="false"]')).toBeVisible();
+  const initial = JSON.parse(await page.getByTestId("schema-preview").innerText());
+  const initialNode = initial.components[0];
   const card = page.getByTestId("metric-card");
   const initialBox = await card.boundingBox();
   if (!initialBox) throw new Error("指标卡没有可见边界");
@@ -49,10 +52,13 @@ test("拖动和缩放会更新 PageSchema 几何信息", async ({ page }) => {
   await page.mouse.move(initialBox.x + initialBox.width / 2 - 40, initialBox.y - 12);
   await page.mouse.up();
 
-  const moved = JSON.parse(await page.getByTestId("schema-preview").innerText());
-  expect(moved.components[0].position).not.toEqual({ x: 455, y: 250 });
+  await expect.poll(async () => {
+    const moved = JSON.parse(await page.getByTestId("schema-preview").innerText());
+    return moved.components[0].position;
+  }).not.toEqual(initialNode.position);
 
   const resizeHandle = page.locator(".moveable-control.moveable-se");
+  await expect(resizeHandle).toBeVisible();
   const handleBox = await resizeHandle.boundingBox();
   if (!handleBox) throw new Error("缩放控制点不可见");
   await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
@@ -63,11 +69,11 @@ test("拖动和缩放会更新 PageSchema 几何信息", async ({ page }) => {
   await expect.poll(async () => {
     const resized = JSON.parse(await page.getByTestId("schema-preview").innerText());
     return resized.components[0].size.width;
-  }).toBeGreaterThan(300);
+  }).toBeGreaterThan(initialNode.size.width);
   await expect.poll(async () => {
     const resized = JSON.parse(await page.getByTestId("schema-preview").innerText());
     return resized.components[0].size.height;
-  }).toBeGreaterThan(214);
+  }).toBeGreaterThan(initialNode.size.height);
 });
 
 test("合法 Schema 可以导入并导出为 JSON 文件", async ({ page }) => {
@@ -318,4 +324,36 @@ test("添加并发布告警列表后聚合活动告警并在恢复后清空", as
   });
   await expect(alarmList).toContainText("当前无活动告警");
   await expect(rows).toHaveCount(0);
+});
+
+test("运行态可查看由真实观测证明的历史告警", async ({ page, request }) => {
+  const pageId = `history-browser-${Date.now()}`;
+  const dataKey = `pump-${Date.now()}.outlet_temp`;
+  await page.goto(`/editor/${pageId}`);
+  await expect(page.locator('main[aria-busy="false"]')).toBeVisible();
+  await page.getByLabel("数据键").fill(dataKey);
+  await page.getByRole("button", { name: "告警列表" }).click();
+  await page.getByRole("button", { name: "发布版本" }).click();
+  await page.getByRole("button", { name: "预览运行态" }).click();
+
+  const historyButton = page.getByTestId("alarm-list").getByRole("button", { name: /历史/ });
+  await expect(page.getByTestId("alarm-list")).toContainText("0 条");
+  await historyButton.click();
+  const drawer = page.getByTestId("history-drawer");
+  await expect(drawer).toContainText("暂无历史告警");
+  await drawer.getByRole("button", { name: "关闭历史告警" }).click();
+
+  for (const value of [72, 83, 79]) {
+    const sent = await request.post("http://127.0.0.1:8000/api/telemetry", {
+      data: { timestamp: "2026-09-27T10:00:00Z", values: { [dataKey]: value } },
+    });
+    expect(sent.status()).toBe(202);
+  }
+  await expect(page.getByTestId("alarm-list")).toContainText("当前无活动告警");
+  await historyButton.click();
+  await expect(drawer).toContainText("出口温度越界");
+  await expect(drawer).toContainText("已恢复");
+  await drawer.getByText("查看观测依据").click();
+  await expect(drawer).toContainText("触发：#");
+  await page.screenshot({ path: "/tmp/industrial-history-real.png" });
 });

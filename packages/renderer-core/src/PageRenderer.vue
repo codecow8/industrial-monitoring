@@ -3,6 +3,7 @@ import { computed } from "vue";
 import type { PageSchema } from "@industrial/schema";
 import type { ComponentNode } from "@industrial/schema";
 import type { ComponentRegistry, DataPointView, TrendSampleView } from "./index";
+import type { ActiveAlarmView } from "./activeAlarms";
 import { componentNodeStyle, resolveActiveAlarms } from "./index";
 
 const props = defineProps<{
@@ -10,6 +11,8 @@ const props = defineProps<{
   registry: ComponentRegistry;
   dataPoints?: Record<string, DataPointView>;
   trendSamples?: Record<string, readonly TrendSampleView[]>;
+  onAnalyzeAlarm?: (alarm: ActiveAlarmView) => void;
+  onShowAlarmHistory?: () => void;
 }>();
 
 const previewPoint: DataPointView = { value: 68.4, freshness: "fresh", ageMs: 0 };
@@ -68,6 +71,8 @@ function dataPointFor(node: ComponentNode): DataPointView {
         :trend-samples="node.type === 'trend-chart' ? (trendSamples?.[node.props.dataKey] ?? []) : undefined"
         :alarm-summary="node.type === 'alarm-list' ? alarmSummary : undefined"
         :example="node.type === 'alarm-list' && dataPoints === undefined"
+        :on-analyze="node.type === 'alarm-list' ? onAnalyzeAlarm : undefined"
+        :on-history="node.type === 'alarm-list' ? onShowAlarmHistory : undefined"
       />
     </div>
   </div>

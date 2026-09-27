@@ -4,8 +4,72 @@ import {
   isPageSchema,
   type PageSchema,
 } from "@industrial/schema";
+import type { ActiveAlarmView } from "@industrial/renderer-core";
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "/api";
+
+export type DiagnosisStatement = { text: string; sourceIds: string[] };
+export type DiagnosisSource = { id: string; type: "observation" | "manual" | "page"; title?: string; excerpt?: string; value?: number; receivedAt?: string };
+export type AlarmDiagnosis = {
+  status: "completed" | "insufficient_evidence";
+  alarm: { pageId: string; version: number; condition: { kind: string; dataKey: string } };
+  observedFacts: DiagnosisStatement[];
+  possibleCauses: DiagnosisStatement[];
+  recommendedChecks: DiagnosisStatement[];
+  sources: DiagnosisSource[];
+  dataFreshness: { windowStart: string; windowEnd: string; latestReceivedAt: string; stale: boolean };
+};
+
+export async function diagnoseAlarm(pageId: string, alarm: ActiveAlarmView): Promise<AlarmDiagnosis> {
+  const response = await fetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/alarm-diagnoses`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: alarm.kind, dataKey: alarm.dataKey, threshold: alarm.threshold }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new Error(body?.detail ?? `分析失败（${response.status}）`);
+  }
+  return await response.json() as AlarmDiagnosis;
+}
+
+export type HistoryObservation = { id: number; value: number; receivedAt: string; sourceTimestamp: string };
+export type HistoryTransition = { from: HistoryObservation; to: HistoryObservation };
+export type AlarmHistoryRecord = {
+  id: string;
+  kind: "threshold" | "fault";
+  title: string;
+  deviceName: string;
+  dataKey: string;
+  threshold?: number;
+  stateCode?: number;
+  unit: string | null;
+  precision: number;
+  triggeredAt: string;
+  recoveredAt: string;
+  trigger: HistoryTransition;
+  recovery: HistoryTransition;
+};
+export type AlarmHistoryPage = {
+  pageId: string;
+  version: number;
+  windowStart: string;
+  windowEnd: string;
+  total: number;
+  records: AlarmHistoryRecord[];
+  nextOffset: number | null;
+};
+
+export async function loadAlarmHistory(pageId: string, offset = 0, asOf?: string): Promise<AlarmHistoryPage> {
+  const params = new URLSearchParams({ limit: "20", offset: String(offset) });
+  if (asOf) params.set("asOf", asOf);
+  const response = await fetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/alarm-history?${params}`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new Error(body?.detail ?? `加载历史告警失败（${response.status}）`);
+  }
+  return await response.json() as AlarmHistoryPage;
+}
 
 export type PublishedPage = {
   pageId: string;

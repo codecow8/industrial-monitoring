@@ -43,3 +43,7 @@ _Avoid_: Alarm Record, Notification
 **Alarm Transition**:
 相邻 Telemetry Observation 证明同一 Alarm Condition 从未触发变为触发，或从触发变为恢复的变化；缺少前一项观测时无法确定转折时间。
 _Avoid_: Alarm History, Alarm Acknowledgement
+
+**Historical Alarm Occurrence**:
+当前发布版本内、一条有相邻观测证明的触发与之后恢复所组成的历史记录；首版只查询最近 24 小时的演示遥测，不是长期告警事件台账，也不包含尚未恢复的 Active Alarm。
+_Avoid_: Active Alarm, Telemetry Observation, Alarm Acknowledgement
