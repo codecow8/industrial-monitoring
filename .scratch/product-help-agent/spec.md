@@ -43,7 +43,7 @@ Status: confirmed
 
 ## 当前任务
 
-[10：使用帮助问答验收收尾](./issues/10-help-acceptance.md)已完成，14 个固定案例累计核对通过。正式网页使用真实 Pi HTTP 问答；原型全部批准，客户端、Agent 测试及构建通过。正在整理文本组件与使用帮助的本地提交，不推送；提交状态以 Git 日志为准，不代表所有问法、移动端或 Electron 已验收。
+[10：使用帮助问答验收收尾](./issues/10-help-acceptance.md)已完成，14 个固定案例累计核对通过。文本组件及使用帮助已提交并推送（`2b9d29d`）。[第二阶段只读历史查询](../alarm-query-agent/spec.md)的范围与原型已批准，Pi / HTTP / Vue 接入及 20+1 真实网页分页验收已完成；不代表所有问法、移动端或 Electron 已验收。
 
 ## Comments
 

@@ -21,6 +21,7 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
   const dirty = ref(false);
   const history = ref<PageSchema[]>([clonePageSchema(schema.value)]);
   const historyIndex = ref(0);
+  let loadSequence = 0;
 
   const selectedNode = computed(() =>
     schema.value.components.find((node) => node.id === selectedId.value) ?? null,
@@ -44,7 +45,10 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
   }
 
   async function load(pageId: string): Promise<void> {
-    schema.value = await loadPageSchema(pageId);
+    const sequence = ++loadSequence;
+    const loaded = await loadPageSchema(pageId);
+    if (sequence !== loadSequence) return;
+    schema.value = loaded;
     selectedId.value = schema.value.components[0]?.id ?? null;
     dirty.value = false;
     resetHistory();

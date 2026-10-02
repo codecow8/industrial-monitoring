@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElDialog, ElInput, ElInputNumber, ElMessage } from "element-plus";
 import "element-plus/es/components/dialog/style/css";
@@ -11,8 +11,8 @@ import { PageRenderer } from "@industrial/renderer-core";
 import { webComponentRegistry } from "@industrial/components-web";
 import { useEditorDocumentStore } from "@/stores/editorDocument";
 import UiIcon from "@/components/UiIcon.vue";
-import { publishPage } from "@/data/pageRepository";
-import { productHelp } from "@/data/productHelp";
+import { publishPage, loadPublishedPage } from "@/data/pageRepository";
+import { productHelp, bindHelpPage } from "@/data/productHelp";
 
 type DragEvent = {
   target: HTMLElement | SVGElement;
@@ -62,16 +62,26 @@ function syncTarget(): void {
   });
 }
 
-onMounted(async () => {
+let pageLoadSequence = 0;
+watch(() => route.params.pageId, async () => {
+  const sequence = ++pageLoadSequence;
+  const pageId = String(route.params.pageId);
+  loading.value = true;
   try {
-    await store.load(String(route.params.pageId));
+    await store.load(pageId);
+    if (sequence !== pageLoadSequence) return;
+    bindHelpPage(pageId, store.schema.name);
+    try {
+      const published = await loadPublishedPage(pageId);
+      if (sequence === pageLoadSequence && productHelp.pageId === pageId) productHelp.pageVersion = Math.max(productHelp.pageVersion ?? 0, published?.version ?? 0);
+    } catch { /* 不把请求失败当作尚未发布，保留未知状态。 */ }
     syncTarget();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "加载草稿失败");
+    if (sequence === pageLoadSequence) ElMessage.error(error instanceof Error ? error.message : "加载草稿失败");
   } finally {
-    loading.value = false;
+    if (sequence === pageLoadSequence) loading.value = false;
   }
-});
+}, { immediate: true });
 
 watch(() => store.selectedId, syncTarget);
 
@@ -127,6 +137,7 @@ async function publishCurrentDraft(): Promise<void> {
   try {
     if (!(await saveDraft(false))) return;
     const published = await publishPage(store.schema.id);
+    if (productHelp.pageId === published.pageId) productHelp.pageVersion = published.version;
     ElMessage.success(`已发布 v${published.version}`);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "发布页面失败");

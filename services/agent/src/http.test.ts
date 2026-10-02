@@ -150,3 +150,35 @@ test("拦截跨站、错误 Host、缺少客户端标识及非法输入", async 
   const preflight = await fetch(api.base + path, { method: "OPTIONS", headers: { Origin: "http://localhost:5173" } });
   assert.equal(preflight.status, 204);
 });
+
+test("页面只在创建时传给服务端工厂，不能在提问时改绑或注入工具配置", async (t) => {
+  const contexts: Array<{ pageId?: string }> = [];
+  const api = await start(t, { createConversation: async (context) => {
+    contexts.push(context);
+    return { ask: async () => ({ answer: "正常", sources: [] }), dispose() {} };
+  } });
+  const created = await api.post("/api/help/sessions", { pageId: "demo" });
+  assert.equal(created.status, 201);
+  assert.deepEqual(contexts, [{ pageId: "demo" }]);
+  const path = `/api/help/sessions/${created.body.sessionId}/questions`;
+  assert.equal((await api.post(path, { requestId: randomUUID(), question: "历史", pageId: "other" })).status, 400);
+  assert.equal((await api.post("/api/help/sessions", { pageId: "demo", url: "https://evil.example" })).status, 400);
+  assert.equal((await api.post("/api/help/sessions", { pageId: " " })).status, 400);
+  assert.equal((await api.post(path, { requestId: randomUUID(), question: "历史" })).status, 200);
+  assert.equal(contexts.length, 1);
+});
+
+test("显式分页命令传入会话，重试编号不能换用别的查询或动作", async (t) => {
+  const commands: unknown[] = [];
+  const api = await start(t, { createConversation: async () => ({
+    ask: async (_question, _signal, command) => { commands.push(command); return { answer: "完成", sources: [] }; }, dispose() {},
+  }) });
+  const id = await api.session(), path = `/api/help/sessions/${id}/questions`;
+  const body = { requestId: randomUUID(), question: "继续历史", historyCommand: { action: "next", queryId: randomUUID() } };
+  assert.equal((await api.post(path, body)).status, 200);
+  assert.equal((await api.post(path, body)).status, 200);
+  assert.equal((await api.post(path, { ...body, historyCommand: { queryId: body.historyCommand.queryId, action: "next" } })).status, 200);
+  assert.deepEqual(commands, [body.historyCommand]);
+  assert.equal((await api.post(path, { ...body, historyCommand: { action: "start" } })).status, 409);
+  assert.equal((await api.post(path, { ...body, requestId: randomUUID(), historyCommand: { ...body.historyCommand, pageId: "other" } })).status, 400);
+});

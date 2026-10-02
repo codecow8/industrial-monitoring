@@ -104,3 +104,30 @@ def test_history_only_uses_observations_after_current_publish() -> None:
     assert empty.json()["records"] == []
     assert complete.json()["version"] == 2
     assert complete.json()["total"] == 1
+
+
+def test_history_ids_distinguish_two_thresholds_on_the_same_observation() -> None:
+    page_id = f"history-thresholds-{uuid4()}"
+    data_key = f"pump-{uuid4()}.temperature"
+    schema = json.loads(FIXTURE.read_text())
+    schema["id"] = page_id
+    schema["components"][0]["props"].update(dataKey=data_key, alarmThreshold=80)
+    schema["components"].append({
+        "id": "trend-other-threshold", "type": "trend-chart",
+        "position": {"x": 20, "y": 500}, "size": {"width": 720, "height": 300},
+        "props": {"title": "另一阈值", "dataKey": data_key, "unit": "°C", "precision": 1, "alarmThreshold": 90},
+    })
+    with TestClient(app) as client:
+        assert client.put(f"/api/pages/{page_id}/draft", json=schema).status_code == 200
+        assert client.post(f"/api/pages/{page_id}/publish").status_code == 200
+        for value in (70, 95, 70):
+            send(client, data_key, value)
+        response = client.get(f"/api/pages/{page_id}/alarm-history")
+        repeated = client.get(f"/api/pages/{page_id}/alarm-history", params={"asOf": response.json()["windowEnd"]})
+    assert response.status_code == repeated.status_code == 200
+    records = response.json()["records"]
+    assert len(records) == 2
+    assert {record["threshold"] for record in records} == {80, 90}
+    assert records[0]["trigger"]["to"]["id"] == records[1]["trigger"]["to"]["id"]
+    assert len({record["id"] for record in records}) == 2
+    assert [record["id"] for record in records] == [record["id"] for record in repeated.json()["records"]]

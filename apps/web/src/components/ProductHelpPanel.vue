@@ -2,10 +2,14 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import UiIcon from "./UiIcon.vue";
-import { productHelp as help, retryHelp, sendHelp, startNewHelpSession } from "@/data/productHelp";
+import { productHelp as help, retryHelp, sendHelp, startNewHelpSession, bindHelpPage, moreHelpHistory, queryHelpHistory } from "@/data/productHelp";
+import HelpHistoryResult from "./HelpHistoryResult.vue";
 
 const route = useRoute();
 const visible = computed(() => help.open && route.name === "editor");
+watch(() => [route.name, route.params.pageId], () => {
+  if (route.name === "editor") bindHelpPage(String(route.params.pageId));
+}, { immediate: true });
 const input = ref<HTMLTextAreaElement | null>(null);
 const scroll = ref<HTMLElement | null>(null);
 function close(): void {
@@ -20,41 +24,57 @@ function onInputKey(event: KeyboardEvent): void {
   }
 }
 function startNew(): void { startNewHelpSession(); nextTick(() => input.value?.focus()); }
+async function continueHistory(messageId: string): Promise<void> {
+  await moreHelpHistory(messageId);
+  await nextTick();
+  const target = scroll.value?.querySelector<HTMLElement>(`[data-help-message-id="${messageId}"]`);
+  if (target && scroll.value) scroll.value.scrollTop += target.getBoundingClientRect().bottom - scroll.value.getBoundingClientRect().bottom;
+}
 onMounted(() => window.addEventListener("keydown", onEscape));
 onUnmounted(() => window.removeEventListener("keydown", onEscape));
 watch(visible, (open) => { if (open) nextTick(() => input.value?.focus()); });
-watch(() => [help.messages.length, help.pending, help.error, help.expired, visible.value], () => {
-  nextTick(() => { if (scroll.value) scroll.value.scrollTop = scroll.value.scrollHeight; });
+watch(() => [help.messages.length, help.pending, help.error, help.expired, visible.value], (value, previous) => {
+  nextTick(() => {
+    if (!scroll.value) return;
+    const latest = help.messages.at(-1);
+    if (value[0] !== previous[0] && latest?.history?.data && !help.pending) {
+      const target = scroll.value.querySelector<HTMLElement>(".help-message:last-child");
+      if (target) scroll.value.scrollTop += target.getBoundingClientRect().top - scroll.value.getBoundingClientRect().top;
+    } else scroll.value.scrollTop = scroll.value.scrollHeight;
+  });
 });
 </script>
 
 <template>
   <aside v-if="visible" id="product-help" class="help-panel" aria-labelledby="help-title" data-screen-label="产品使用帮助" data-testid="help-panel">
     <header class="help-header">
-      <div class="help-heading"><UiIcon name="info" :size="19" /><div><h2 id="help-title">使用帮助</h2><p>操作指南问答 · 只读指导</p></div></div>
+      <div class="help-heading"><UiIcon name="info" :size="19" /><div><h2 id="help-title">使用帮助</h2><p>操作指南 · 历史告警只读查询</p></div></div>
       <button class="help-close" type="button" aria-label="关闭使用帮助" @click="close"><UiIcon name="close" :size="18" /></button>
     </header>
-    <div class="help-scope"><UiIcon name="lock" :size="13" /><span>不修改页面、不代为发布、不查询实时设备数据</span></div>
+    <div class="help-scope"><UiIcon name="lock" :size="13" /><span>只读本页历史 · 不代为操作，不查询活动告警</span></div>
+    <div class="help-page-context"><span>{{ help.pageName }} <small>({{ help.pageId }})</small></span><strong v-if="help.pageVersion !== null">{{ help.pageVersion ? `当前发布 v${help.pageVersion}` : '尚未发布' }}</strong></div>
     <div ref="scroll" class="help-conversation" role="log" aria-label="帮助对话" aria-live="polite" :aria-busy="help.pending">
       <section v-if="!help.messages.length && !help.expired" class="help-welcome">
         <div class="help-welcome-icon"><UiIcon name="info" :size="26" /></div>
-        <h3>配置页面时遇到问题？</h3><p>问我如何添加组件、绑定数据或发布页面。回答会附上可核对的指南章节。</p>
+        <h3>配置页面时遇到问题？</h3><p>问我如何添加组件、绑定数据或发布页面。也可以查询当前页面的已恢复历史，查看对应观测依据。</p>
         <div class="help-suggestions">
           <button type="button" @click="sendHelp('怎样发布当前页面？')">怎样发布当前页面？<span>↗</span></button>
           <button type="button" @click="sendHelp('出口温度的数据键怎么设置？')">出口温度的数据键怎么设置？<span>↗</span></button>
           <button type="button" @click="sendHelp('怎样添加文本标题？')">怎样添加文本标题？<span>↗</span></button>
+          <button type="button" @click="queryHelpHistory">查询当前页面历史告警<span>↗</span></button>
         </div>
       </section>
-      <article v-for="message in help.messages" :key="message.id" class="help-message" :class="`help-message--${message.role}`">
+      <article v-for="message in help.messages" :key="message.id" :data-help-message-id="message.id" class="help-message" :class="`help-message--${message.role}`">
         <span class="help-speaker">{{ message.role === 'user' ? '你' : '使用帮助' }}</span><p>{{ message.text }}</p>
-        <div v-if="message.sources?.length" class="help-sources"><span class="help-source-label">操作指南依据</span>
+        <HelpHistoryResult v-if="message.history" :history="message.history" :current-version="help.pageVersion" :pending="help.pending || help.expired" @more="continueHistory(message.id)" @refresh="queryHelpHistory" />
+        <div v-if="!message.history && message.sources?.length" class="help-sources"><span class="help-source-label">操作指南依据</span>
           <details v-for="source in message.sources" :key="source.title"><summary><UiIcon name="text" :size="13" /><span>{{ source.title }}</span><span class="help-source-expand">展开原文</span></summary>
             <div class="help-source-content"><small>{{ source.source }} · {{ source.title }}</small><p>{{ source.content }}</p></div>
           </details>
         </div>
       </article>
-      <div v-if="help.pending" class="help-loading" role="status"><span class="help-spinner"></span>正在查阅操作指南…</div>
-      <div v-if="help.error" class="help-error" role="alert"><strong>本次问答失败</strong><p>{{ help.error }}</p><button type="button" @click="retryHelp">重试这条问题</button></div>
+      <div v-if="help.pending" class="help-loading" role="status"><span class="help-spinner"></span>{{ help.queryingHistory ? '正在查询历史告警…' : '正在查阅操作指南…' }}</div>
+      <div v-if="help.error" class="help-error" role="alert"><strong>{{ help.queryingHistory ? '历史查询失败' : '本次问答失败' }}</strong><p>{{ help.error }}</p><button type="button" @click="retryHelp">重试这条问题</button></div>
       <div v-if="help.expired" class="help-error help-expired" role="alert"><strong>会话已过期</strong><p>闲置超过 15 分钟或服务重启，之前的上下文已失效。旧对话仅供查看，不能继续追问。</p><p>开始新会话后会清空当前对话，请重新说明问题背景。</p><button type="button" @click="startNew">开始新会话</button></div>
     </div>
     <form class="help-composer" @submit.prevent="sendHelp(help.draft)">

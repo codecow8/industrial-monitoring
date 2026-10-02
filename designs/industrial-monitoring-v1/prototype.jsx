@@ -997,13 +997,55 @@ function helpExample(query, previousMessages) {
   return { text: "当前原型只演示发布、查看运行态、数据绑定和文本标题等固定案例。这个问题暂无可演示的操作依据，不会编造入口或实时数据。\n正式版本将由 Agent 检索产品指南后回答。", sources: [boundarySource] };
 }
 
-function ProductHelpPanel({ open, onClose }) {
+// 固定原型案例：21 条完整触发/恢复记录，用于评审 20 + 1 分页，不是真实观测。
+function mockHelpHistory(version, pageId, empty = false) {
+  const time = (minute, seconds = "00") => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}:${seconds}`;
+  const records = Array.from({ length: empty ? 0 : 21 }, (_, index) => {
+    const fault = index % 5 === 1, minute = 850 - index * 4, id = 900 - index * 4;
+    return {
+      id: `demo-${index + 1}`, title: fault ? "设备状态故障" : "出口温度越界", device: "1号冷却泵",
+      key: fault ? "pump1.operating_state" : "pump1.outlet_temp",
+      triggeredAt: time(minute), recoveredAt: time(minute + 2),
+      trigger: { before: fault ? "状态码 1" : "76.0 °C", after: fault ? "状态码 2" : "83.0 °C", beforeId: id, afterId: id + 1, beforeTime: time(minute - 1, "59") },
+      recovery: { before: fault ? "状态码 2" : "83.0 °C", after: fault ? "状态码 1" : "74.0 °C", beforeId: id + 2, afterId: id + 3, beforeTime: time(minute + 1, "59") },
+    };
+  });
+  return { version, pageId, total: records.length, shown: Math.min(20, records.length), records, cutoff: "2026-10-02 14:30" };
+}
+
+function HelpHistoryResult({ history, currentVersion, pending, onMore, onRefresh }) {
+  const changed = history.version !== currentVersion;
+  return <section className="help-history-result" aria-label="历史告警查询结果">
+    <div className="help-history-heading"><strong>已恢复的历史告警</strong><span>v{history.version} · {history.pageId}</span></div>
+    <p className="help-history-window">最近 24 小时内 · 本例实际范围：10-02 08:00 — 14:30<br />受当前发布版本时间限制；截止时间固定。</p>
+    <p className="help-history-demo-note">模拟案例 · 假设本版本发布于 08:00，以下观测 ID 不是真实数据库记录。</p>
+    {changed && <div className="help-history-notice" role="status"><strong>发布版本已变化</strong><p>当前为 v{currentVersion}。以下旧查询仅供查看，不能继续旧分页。</p><button type="button" disabled={pending} onClick={onRefresh}>重新查询当前版本</button></div>}
+    {history.total === 0 ? <div className="help-history-empty"><strong>本次范围内无完整历史记录</strong><p>没有可证明触发并恢复的记录。不代表没有活动告警，尚未恢复或缺少触发依据的告警不在结果内。</p></div> : <>
+      <div className="help-history-count"><strong>共 {history.total} 条</strong><span>已显示 {history.shown} 条 · 按触发时间倒序</span></div>
+      <div className="help-history-records">{history.records.slice(0, history.shown).map((record, index) => <article className="help-alarm-record" key={record.id}>
+        <div className="help-alarm-title"><strong>{String(index + 1).padStart(2, "0")} · {record.title}</strong><span>已恢复</span></div>
+        <p className="help-alarm-device">{record.device} · {record.key}</p>
+        <div className="help-alarm-times"><span>触发 <strong>{record.triggeredAt}</strong></span><span>恢复 <strong>{record.recoveredAt}</strong></span></div>
+        <details><summary><Icon name="history" size={12} />查看观测依据</summary><div className="help-alarm-evidence"><small>模拟记录 {record.id} · 不作为根因结论</small>
+          <div><strong>触发转折</strong><p>{record.trigger.before} → {record.trigger.after}</p><small>观测 #{record.trigger.beforeId}（{record.trigger.beforeTime}）→ #{record.trigger.afterId}（{record.triggeredAt}）</small></div>
+          <div><strong>恢复转折</strong><p>{record.recovery.before} → {record.recovery.after}</p><small>观测 #{record.recovery.beforeId}（{record.recovery.beforeTime}）→ #{record.recovery.afterId}（{record.recoveredAt}）</small></div>
+        </div></details>
+      </article>)}</div>
+      <div className="help-history-pagination"><span>已显示 {history.shown} / {history.total}</span>{history.shown < history.total ? <button type="button" disabled={pending || changed} onClick={onMore}>{pending ? "查询中…" : "继续查看"}</button> : <strong>本次结果已全部展示</strong>}</div>
+    </>}
+    <p className="help-history-boundary">仅限本页当前发布版本的已恢复记录，不查询活动告警，不推断故障原因。</p>
+  </section>;
+}
+
+function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [simulateFailure, setSimulateFailure] = useState(false);
   const [expired, setExpired] = useState(false);
+  const [historyExample, setHistoryExample] = useState("records");
+  const lastKind = useRef("guide"), scrollToHistory = useRef(false);
   const timer = useRef(null), input = useRef(null), scroll = useRef(null), lastQuery = useRef("");
   useEffect(() => () => window.clearTimeout(timer.current), []);
   useEffect(() => {
@@ -1013,11 +1055,20 @@ function ProductHelpPanel({ open, onClose }) {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open]);
-  useEffect(() => { if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; }, [messages, pending, error, expired, open]);
+  useEffect(() => {
+    if (!scroll.current) return;
+    if (scrollToHistory.current && !pending && !error && !expired) {
+      const target = scroll.current.querySelector(".help-message:last-child");
+      if (target) scroll.current.scrollTop += target.getBoundingClientRect().top - scroll.current.getBoundingClientRect().top;
+      scrollToHistory.current = false;
+    } else scroll.current.scrollTop = scroll.current.scrollHeight;
+  }, [messages, pending, error, expired, open]);
   const ask = (question, retry = false) => {
     const query = question.trim();
     if (!query || pending || expired) return;
     const fail = !retry && simulateFailure;
+    const historyQuery = /历史|已恢复|告警记录/.test(query);
+    lastKind.current = historyQuery ? "history" : "guide";
     setSimulateFailure(false);
     setError("");
     setPending(true);
@@ -1028,11 +1079,27 @@ function ProductHelpPanel({ open, onClose }) {
     }
     timer.current = window.setTimeout(() => {
       setPending(false);
-      if (fail) setError("暂时无法连接问答服务，本次未生成回答。请重试，不需要重新输入问题。");
+      if (historyQuery && publishedVersion === 0) setMessages((current) => [...current, { role: "assistant", text: "当前页面尚未发布，不能查询发布版本内的历史告警。请先手动点击顶部“发布版本”，确认发布成功后再查询。" }]);
+      else if (fail || (historyQuery && historyExample === "error" && !retry)) setError(historyQuery ? "历史查询未成功，本次没有获得记录，不能据此判断有没有告警。可重试同一个问题。" : "暂时无法连接问答服务，本次未生成回答。请重试，不需要重新输入问题。");
+      else if (historyQuery) {
+        scrollToHistory.current = true;
+        setMessages((current) => [...current, { role: "assistant", text: "查询范围已限定为当前页面及发布版本。以下为固定模拟结果：", history: mockHelpHistory(publishedVersion, pageId, historyExample === "empty") }]);
+      }
       else setMessages((current) => [...current, { role: "assistant", ...helpExample(query, current) }]);
     }, 900);
   };
   const close = () => { onClose(); document.querySelector('[data-help-entry]')?.focus(); };
+  const moreHistory = (index) => {
+    if (pending || expired) return;
+    const history = messages[index].history;
+    if (history.version !== publishedVersion || history.shown >= history.total) return;
+    setPending(true);
+    lastKind.current = "history";
+    timer.current = window.setTimeout(() => {
+      setPending(false);
+      setMessages((current) => current.map((message, i) => i === index ? { ...message, history: { ...message.history, shown: Math.min(history.shown + 20, history.total) } } : message));
+    }, 650);
+  };
   const expire = () => {
     setExpired(true);
     setError("");
@@ -1050,15 +1117,16 @@ function ProductHelpPanel({ open, onClose }) {
   return (
     <aside id="product-help" className="help-panel" aria-labelledby="help-title" data-help-panel data-screen-label="产品使用帮助">
       <header className="help-header">
-        <div className="help-heading"><Icon name="info" size={19} /><div><h2 id="help-title">使用帮助</h2><p>操作指南问答 · 只读指导</p></div></div>
+        <div className="help-heading"><Icon name="info" size={19} /><div><h2 id="help-title">使用帮助</h2><p>操作指南 · 历史告警只读查询</p></div></div>
         <button className="help-close" type="button" aria-label="关闭使用帮助" onClick={close}><Icon name="close" size={18} /></button>
       </header>
-      <div className="help-scope"><Icon name="lock" size={13} /><span>不修改页面、不代为发布、不查询实时设备数据</span></div>
+      <div className="help-scope"><Icon name="lock" size={13} /><span>只读本页历史 · 不代为操作，不查询活动告警</span></div>
+      <div className="help-page-context"><span>{pageName} <small>({pageId})</small></span><strong>{publishedVersion ? `当前发布 v${publishedVersion}` : "尚未发布"}</strong></div>
       <div className="help-conversation" ref={scroll} role="log" aria-label="帮助对话" aria-live="polite" aria-busy={pending}>
-        {messages.length === 0 && !expired && <section className="help-welcome"><div className="help-welcome-icon"><Icon name="info" size={26} /></div><h3>配置页面时遇到问题？</h3><p>问我如何添加组件、绑定数据或发布页面。回答会附上可核对的指南章节。</p><div className="help-suggestions"><button type="button" onClick={() => ask("怎样发布当前页面？")}>怎样发布当前页面？<span>↗</span></button><button type="button" onClick={() => ask("出口温度的数据键怎么设置？")}>出口温度的数据键怎么设置？<span>↗</span></button><button type="button" onClick={() => ask("怎样添加文本标题？")}>怎样添加文本标题？<span>↗</span></button></div></section>}
-        {messages.map((message, index) => <article className={`help-message help-message--${message.role}`} key={index}><span className="help-speaker">{message.role === "user" ? "你" : "使用帮助"}</span><p>{message.text}</p>{message.sources && <div className="help-sources"><span className="help-source-label">操作指南依据</span>{message.sources.map((source) => <details key={source.title}><summary><Icon name="text" size={13} /><span>{source.title}</span><span className="help-source-expand">展开原文</span></summary><div className="help-source-content"><small>docs/product-guide.md · {source.title}</small><p>{source.excerpt}</p></div></details>)}</div>}</article>)}
-        {pending && <div className="help-loading" role="status"><span className="diagnosis-spinner"></span>正在查阅操作指南…</div>}
-        {error && <div className="help-error" role="alert"><strong>本次问答失败</strong><p>{error}</p><button type="button" onClick={() => ask(lastQuery.current, true)}>重试这条问题</button></div>}
+        {messages.length === 0 && !expired && <section className="help-welcome"><div className="help-welcome-icon"><Icon name="info" size={26} /></div><h3>配置页面时遇到问题？</h3><p>问我如何添加组件、绑定数据或发布页面。也可以查询当前页面的已恢复历史，查看对应观测依据。</p><div className="help-suggestions"><button type="button" onClick={() => ask("怎样发布当前页面？")}>怎样发布当前页面？<span>↗</span></button><button type="button" onClick={() => ask("出口温度的数据键怎么设置？")}>出口温度的数据键怎么设置？<span>↗</span></button><button type="button" onClick={() => ask("怎样添加文本标题？")}>怎样添加文本标题？<span>↗</span></button><button type="button" onClick={() => ask("查询当前页面最近24小时的历史告警")}>查询当前页面历史告警<span>↗</span></button></div></section>}
+        {messages.map((message, index) => <article className={`help-message help-message--${message.role}`} key={index}><span className="help-speaker">{message.role === "user" ? "你" : "使用帮助"}</span><p>{message.text}</p>{message.history && <HelpHistoryResult history={message.history} currentVersion={publishedVersion} pending={pending || expired} onMore={() => moreHistory(index)} onRefresh={() => ask("查询当前页面历史告警")} />}{message.sources && <div className="help-sources"><span className="help-source-label">操作指南依据</span>{message.sources.map((source) => <details key={source.title}><summary><Icon name="text" size={13} /><span>{source.title}</span><span className="help-source-expand">展开原文</span></summary><div className="help-source-content"><small>docs/product-guide.md · {source.title}</small><p>{source.excerpt}</p></div></details>)}</div>}</article>)}
+        {pending && <div className="help-loading" role="status"><span className="diagnosis-spinner"></span>{lastKind.current === "history" ? "正在查询历史告警…" : "正在查阅操作指南…"}</div>}
+        {error && <div className="help-error" role="alert"><strong>{lastKind.current === "history" ? "历史查询失败" : "本次问答失败"}</strong><p>{error}</p><button type="button" onClick={() => ask(lastQuery.current, true)}>重试这条问题</button></div>}
         {expired && <div className="help-error help-expired" role="alert"><strong>会话已过期</strong><p>闲置超过 15 分钟或服务重启，之前的上下文已失效。旧对话仅供查看，不能继续追问。</p><p>开始新会话后会清空当前对话，请重新说明问题背景。</p><button type="button" onClick={startNewSession}>开始新会话</button></div>}
       </div>
       <form className="help-composer" onSubmit={(event) => { event.preventDefault(); ask(draft); }}>
@@ -1067,7 +1135,7 @@ function ProductHelpPanel({ open, onClose }) {
         <div className="help-composer-actions"><span>Enter 发送 · Shift+Enter 换行</span><button type="submit" disabled={expired || pending || !draft.trim()}>{pending ? "查阅中" : "发送"}</button></div>
         <p className="help-session-note">关闭后保留 · 闲置 15 分钟过期 · 刷新后清空</p>
       </form>
-      <div className="help-demo"><span>原型 · 未连接模型</span><div className="help-demo-actions"><button type="button" disabled={pending || expired} aria-pressed={simulateFailure} onClick={() => setSimulateFailure(!simulateFailure)}>{simulateFailure ? "下次将失败" : "模拟失败"}</button><button type="button" disabled={pending || expired} onClick={expire}>模拟过期</button></div></div>
+      <div className="help-demo"><span>原型 · 未连接模型</span><div className="help-demo-actions"><button type="button" disabled={pending || expired} aria-pressed={simulateFailure} onClick={() => setSimulateFailure(!simulateFailure)}>{simulateFailure ? "下次将失败" : "模拟失败"}</button><button type="button" disabled={pending || expired} onClick={expire}>模拟过期</button></div><label className="help-history-demo">历史案例<select value={historyExample} disabled={pending} onChange={(event) => setHistoryExample(event.target.value)} aria-label="历史告警原型案例"><option value="records">21条记录 · 20+1分页</option><option value="empty">无完整记录</option><option value="error">查询失败</option></select></label></div>
     </aside>
   );
 }
@@ -1083,7 +1151,7 @@ function TrendPrototypeApp() {
   ] });
   useEffect(() => { const handler = (event) => { if (event.key === "Escape" && mode === "runtime" && !document.querySelector("[data-diagnosis-drawer], [data-history-drawer]")) setMode("editor"); }; window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler); }, [mode]);
   const publish = () => { const version = (published?.version ?? 0) + 1; setPublished({ version, schema: JSON.parse(JSON.stringify(pageSchema)) }); return version; };
-  return <>{mode === "runtime" ? <TrendRuntime published={published} onBack={() => setMode("editor")} /> : <TrendEditorV5 pageSchema={pageSchema} setPageSchema={setPageSchema} onPreview={() => setMode("runtime")} onPublish={publish} publishedVersion={published?.version ?? 0} onHelp={() => setHelpOpen(!helpOpen)} />}<ProductHelpPanel open={helpOpen && mode === "editor"} onClose={() => setHelpOpen(false)} /></>;
+  return <>{mode === "runtime" ? <TrendRuntime published={published} onBack={() => setMode("editor")} /> : <TrendEditorV5 pageSchema={pageSchema} setPageSchema={setPageSchema} onPreview={() => setMode("runtime")} onPublish={publish} publishedVersion={published?.version ?? 0} onHelp={() => setHelpOpen(!helpOpen)} />}<ProductHelpPanel pageId={pageSchema.id} pageName={pageSchema.name} publishedVersion={published?.version ?? 0} open={helpOpen && mode === "editor"} onClose={() => setHelpOpen(false)} /></>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<TrendPrototypeApp />);

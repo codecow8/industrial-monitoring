@@ -1,4 +1,42 @@
+.help-page-context { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 22px; border-bottom: 1px solid var(--slate-150); font-size: 11px; color: var(--slate-700); }
+.help-page-context small { color: var(--slate-500); }
+.help-page-context strong { font-size: 10px; font-weight: 500; color: var(--slate-500); }
+.help-history-result { margin-top: 15px; border: 1px solid var(--slate-200); border-radius: 4px; overflow: hidden; }
+.help-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 13px; background: var(--paper); }
+.help-history-heading strong { font-size: 13px; color: var(--ink-850); }
+.help-history-heading span { font-size: 10px; color: var(--slate-500); }
+.help-history-result .help-history-window { padding: 10px 13px 4px; color: var(--slate-700); font-size: 11px; line-height: 1.7; }
+.help-history-count { display: flex; align-items: center; justify-content: space-between; gap: 7px; padding: 10px 13px; border-block: 1px solid var(--slate-150); font-size: 11px; color: var(--slate-500); }
+.help-history-count strong { color: var(--ink-850); font-weight: 600; }
+.help-alarm-record { padding: 13px; border-bottom: 1px solid var(--slate-150); }
+.help-alarm-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.help-alarm-title strong { font-size: 12px; font-weight: 600; color: var(--ink-850); }
+.help-alarm-title span { font-size: 10px; color: #157a60; background: rgba(25, 201, 147, .09); padding: 2px 5px; border-radius: 3px; }
+.help-history-result .help-alarm-device { margin-top: 4px; font-size: 10px; color: var(--slate-500); overflow-wrap: anywhere; }
+.help-alarm-times { display: flex; gap: 16px; margin-top: 8px; font-size: 10px; color: var(--slate-500); }
+.help-alarm-times strong { color: var(--slate-700); font-weight: 500; font-variant-numeric: tabular-nums; }
+.help-alarm-record summary { display: flex; align-items: center; gap: 5px; margin-top: 9px; color: var(--blue); font-size: 10px; cursor: pointer; list-style: none; }
+.help-alarm-record summary::-webkit-details-marker { display: none; }
+.help-alarm-evidence { margin-top: 9px; padding: 10px; background: var(--paper); border: 1px solid var(--slate-150); border-radius: 3px; }
+.help-alarm-evidence > div { margin-top: 10px; }
+.help-alarm-evidence strong { font-size: 10px; color: var(--slate-700); }
+.help-alarm-evidence small { display: block; color: var(--slate-500); font-size: 10px; line-height: 1.7; overflow-wrap: anywhere; }
+.help-history-result .help-alarm-evidence p { font-size: 11px; color: var(--slate-700); }
+.help-history-pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 13px; font-size: 10px; color: var(--slate-500); }
+.help-history-pagination button, .help-history-notice button { padding: 6px 9px; border: 1px solid var(--slate-200); border-radius: 3px; background: var(--white); color: var(--blue); font-size: 11px; cursor: pointer; }
+.help-history-pagination button:disabled { color: var(--slate-500); background: var(--slate-100); cursor: not-allowed; }
+.help-history-pagination strong { font-size: 10px; font-weight: 500; }
+.help-history-result .help-history-boundary { padding: 10px 13px; border-top: 1px solid var(--slate-150); background: var(--paper); font-size: 10px; color: var(--slate-500); line-height: 1.7; }
+.help-history-empty, .help-history-notice { margin: 10px 13px 13px; padding: 12px; background: var(--paper); border: 1px solid var(--slate-200); border-radius: 3px; }
+.help-history-empty strong, .help-history-notice strong { font-size: 12px; color: var(--ink-850); }
+.help-history-result .help-history-empty p, .help-history-result .help-history-notice p { margin-top: 7px; font-size: 11px; color: var(--slate-700); line-height: 1.7; }
+.help-history-notice button { margin-top: 9px; }
+
 :root {
+  --slate-700: #34495c;
+  --slate-150: #e6ebef;
+  --slate-100: #f1f4f6;
+  --white: #fff;
   --ink-950: #0a1520;
   --ink-900: #0e1d2b;
   --ink-850: #132534;

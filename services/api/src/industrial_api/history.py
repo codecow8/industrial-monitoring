@@ -110,8 +110,11 @@ def read_alarm_history(
                 trigger = transition
             elif trigger is not None:
                 recovery = transition
+                # 同一观测可能同时触发多个阈值，记录身份必须包含完整告警条件。
+                condition_value = (format(condition["threshold"], ".17g")
+                                   if condition["kind"] == "threshold" else str(condition["stateCode"]))
                 records.append({
-                    "id": f"{condition['kind']}:{condition['dataKey']}:{trigger['to']['id']}",
+                    "id": f"{condition['kind']}:{condition['dataKey']}:{condition_value}:{trigger['to']['id']}",
                     **condition,
                     "triggeredAt": trigger["to"]["receivedAt"],
                     "recoveredAt": recovery["to"]["receivedAt"],

@@ -2,16 +2,18 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
-import { createHelpConversation, type HelpConversation, type HelpReply } from "./conversation.ts";
+import { createHelpConversation, type HelpConversation, type HelpReply, type HistoryCommand } from "./conversation.ts";
 
 const uuidPattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
 const requestSchema = Type.Object({
   requestId: Type.String({ pattern: uuidPattern }),
   question: Type.String({ minLength: 1, maxLength: 1000, pattern: "\\S" }),
+  historyCommand: Type.Optional(Type.Object({ action: Type.Union([Type.Literal("start"), Type.Literal("next")]), queryId: Type.Optional(Type.String({ pattern: uuidPattern })) }, { additionalProperties: false })),
 }, { additionalProperties: false });
+const sessionSchema = Type.Object({ pageId: Type.Optional(Type.String({ minLength: 1, maxLength: 128, pattern: "\\S" })) }, { additionalProperties: false });
 const origins = new Set(["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173", "http://127.0.0.1:4173", "http://localhost:4174", "http://127.0.0.1:4174"]);
 type Outcome = { status: number; body: unknown };
-type RequestRecord = { question: string; result?: HelpReply };
+type RequestRecord = { question: string; command: string; result?: HelpReply };
 type Entry = {
   conversation: HelpConversation;
   lastUsed: number;
@@ -53,7 +55,7 @@ function readBody(request: IncomingMessage): Promise<unknown> {
 
 /** 注入会话工厂和时钟仅用于接口测试；线上固定 15 分钟闲置、60 秒超时。 */
 export function createHelpHttpServer(options: {
-  createConversation?: () => Promise<HelpConversation>;
+  createConversation?: (context: { pageId?: string }) => Promise<HelpConversation>;
   now?: () => number;
   idleMs?: number;
   timeoutMs?: number;
@@ -75,16 +77,17 @@ export function createHelpHttpServer(options: {
   const cleanupTimer = setInterval(sweep, 30_000);
   cleanupTimer.unref();
 
-  const ask = (entry: Entry, requestId: string, question: string): Promise<Outcome> => {
+  const ask = (entry: Entry, requestId: string, question: string, command?: HistoryCommand): Promise<Outcome> => {
+    const commandKey = JSON.stringify([command?.action ?? null, command?.queryId ?? null]);
     const existing = entry.requests.get(requestId);
-    if (existing && existing.question !== question) throw new HttpError(409, "REQUEST_ID_CONFLICT", "同一请求编号不能用于不同问题。");
+    if (existing && (existing.question !== question || existing.command !== commandKey)) throw new HttpError(409, "REQUEST_ID_CONFLICT", "同一请求编号不能用于不同问题或分页动作。");
     if (existing?.result) return Promise.resolve({ status: 200, body: { requestId, ...existing.result } });
     if (entry.active) {
       if (entry.active.id === requestId) return entry.active.response;
       throw new HttpError(409, "SESSION_BUSY", "当前会话正在回答，请等待后再提问。");
     }
     if (!existing && entry.requests.size >= 100) throw new HttpError(429, "SESSION_LIMIT", "当前会话已达到问题上限，请刷新开始新会话。");
-    const record = existing ?? { question };
+    const record = existing ?? { question, command: commandKey };
     entry.requests.set(requestId, record);
     const controller = new AbortController();
     let respond!: (outcome: Outcome) => void;
@@ -107,7 +110,7 @@ export function createHelpHttpServer(options: {
         respond({ status: 200, body: { requestId, ...result } });
       } else respond(failure(502, "MODEL_ERROR", "本次未能生成可核对的回答，请重试这条问题。"));
     };
-    Promise.resolve().then(() => entry.conversation.ask(question, controller.signal)).then(
+    Promise.resolve().then(() => entry.conversation.ask(question, controller.signal, command)).then(
       (result) => finish(result), () => finish(),
     );
     return response;
@@ -146,11 +149,11 @@ export function createHelpHttpServer(options: {
       const body = await readBody(request);
       sweep();
       if (request.url === "/api/help/sessions") {
-        if (!Value.Check(Type.Object({}, { additionalProperties: false }), body)) throw new HttpError(400, "INVALID_INPUT", "创建会话无需额外参数。");
+        if (!Value.Check(sessionSchema, body)) throw new HttpError(400, "INVALID_INPUT", "页面绑定需要有效 pageId，不能传入其他配置。");
         if (entries.size + creating >= 20) throw new HttpError(429, "TOO_MANY_SESSIONS", "本机会话数量已达到上限，请等待闲置会话清理。");
         creating++;
         let conversation: HelpConversation;
-        try { conversation = await factory(); }
+        try { conversation = await factory(body); }
         finally { creating--; }
         const sessionId = randomUUID();
         entries.set(sessionId, { conversation, lastUsed: now(), requests: new Map() });
@@ -163,8 +166,8 @@ export function createHelpHttpServer(options: {
       const entry = entries.get(route[1]);
       if (!entry) throw new HttpError(410, "SESSION_EXPIRED", "会话已过期，请开始新会话；之前的对话不会恢复。");
       entry.lastUsed = now();
-      const { requestId, question } = body as { requestId: string; question: string };
-      send(await ask(entry, requestId, question.trim()));
+      const { requestId, question, historyCommand } = body as { requestId: string; question: string; historyCommand?: HistoryCommand };
+      send(await ask(entry, requestId, question.trim(), historyCommand));
     } catch (error) {
       send(error instanceof HttpError ? failure(error.status, error.code, error.message)
         : failure(503, "SERVICE_UNAVAILABLE", "问答服务暂不可用，请检查本机 Pi 配置后重试。"));
