@@ -371,6 +371,7 @@
 
       .canvas-shell {
         position: relative;
+        isolation: isolate;
         grid-column: 2;
         grid-row: 1;
         min-width: 0;
@@ -1611,6 +1612,12 @@
       .help-demo { flex-wrap: wrap; }
       .help-history-demo { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding-top: 6px; border-top: 1px solid var(--slate-200); }
       .help-history-demo select { max-width: 210px; padding: 3px 6px; border: 1px solid var(--slate-200); border-radius: 3px; font: inherit; font-size: 10px; color: var(--slate-700); background: var(--white); }
+      .help-active-coverage { padding: 11px 13px; border-bottom: 1px solid var(--slate-150); background: var(--paper); font-size: 11px; color: var(--slate-700); }
+      .help-active-coverage strong { font-size: 11px; }
+      .help-active-result .help-active-coverage p { margin-top: 5px; font-size: 11px; line-height: 1.7; }
+      .help-active-result .help-active-stale { color: #96611c; background: #fff3df; }
+      .help-active-result .help-active-fresh { color: var(--blue); background: var(--paper); }
+      .help-active-result .help-active-omitted { padding: 12px 13px; font-size: 11px; color: var(--slate-700); }
       .help-panel button:focus-visible, .help-panel summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
       @keyframes fade-in {

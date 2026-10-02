@@ -1037,6 +1037,61 @@ function HelpHistoryResult({ history, currentVersion, pending, onMore, onRefresh
   </section>;
 }
 
+// 固定活动告警原型资料，不调用 API；重新查询更新模拟查询时刻。
+function mockHelpActive(version, pageId, variant) {
+  const queriedAt = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  if (!version) return { status: "not_published", pageId, version, queriedAt, alarms: [], total: 0 };
+  const stale = variant === "stale", partial = variant === "partial";
+  const missing = variant === "missing", normal = variant === "normal", unconfigured = variant === "unconfigured";
+  const limited = variant === "limit";
+  const receivedAt = new Date(Date.now() - (stale ? 12000 : 2000)).toLocaleTimeString("zh-CN", { hour12: false });
+  const total = missing || normal || unconfigured ? 0 : limited ? 23 : partial ? 1 : 2;
+  const alarms = Array.from({ length: Math.min(total, 20) }, (_, index) => {
+    const fault = !partial && index === 0;
+    return { id: `active-demo-${index + 1}`, title: fault ? "设备状态故障" : "出口温度超过阈值",
+      key: fault ? "pump1.operating_state" : limited ? `pump${index + 1}.outlet_temp` : "pump1.outlet_temp",
+      value: fault ? "状态码 2" : "83.0 °C", condition: fault ? "设备状态码 = 2" : "出口温度 ≥ 80.0 °C",
+      observationId: 1200 + index, receivedAt, freshness: stale ? "stale" : "fresh" };
+  });
+  return { status: unconfigured ? "unconfigured" : missing ? "no_data" : partial ? "partial" : stale ? "stale" : "ready",
+    pageId, version, queriedAt, total, alarms, configured: unconfigured ? 0 : limited ? 23 : 2,
+    observed: unconfigured || missing ? 0 : partial ? 1 : limited ? 23 : 2,
+    missing: missing ? ["pump1.outlet_temp", "pump1.operating_state"] : partial ? ["pump1.operating_state"] : [],
+    stale: stale ? ["pump1.outlet_temp", "pump1.operating_state"] : [] };
+}
+
+function HelpActiveResult({ result, currentVersion, pending, onRefresh }) {
+  const changed = result.version > 0 && result.version !== currentVersion;
+  return <section className="help-history-result help-active-result" aria-label="当前活动告警查询结果">
+    <div className="help-history-heading"><strong>活动告警 · 本次观测快照</strong><span>v{result.version} · {result.pageId}</span></div>
+    <p className="help-history-window">查询 {result.queriedAt} · 服务器观测超过 5 秒未更新即过期<br />仅使用本版本发布后、24 小时范围内的最新观测。</p>
+    <p className="help-history-demo-note">模拟案例 · 观测 ID 用于原型评审，不是真实数据库记录。</p>
+    {changed && <div className="help-history-notice" role="status"><strong>发布版本已变化</strong><p>这是旧版本查询结果，请重新查询当前版本。</p></div>}
+    {result.status === "not_published" ? <div className="help-history-empty"><strong>当前页面尚未发布</strong><p>请先手动发布，再查询该版本的活动告警。</p></div>
+      : result.status === "unconfigured" ? <div className="help-history-empty"><strong>未配置告警条件</strong><p>没有可查询的条件，不代表设备正常。</p></div>
+      : <>
+        <div className="help-history-count"><strong>已观测告警 {result.total} 条</strong><span>已显示 {result.alarms.length} 条 · 故障优先</span></div>
+        <div className="help-active-coverage"><strong>资料覆盖 {result.observed} / {result.configured} 项</strong>
+          {result.missing.length > 0 && <p>缺少观测：{result.missing.join("、")}。资料不完整，不能宣称当前全部正常。</p>}
+          {result.stale.length > 0 && <p>已过期：{result.stale.join("、")}。最后观测触发的告警保留，当前状态需核实。</p>}
+          {!result.missing.length && !result.stale.length && <p>本次观测完整且未过期。后续变化需要手动重新查询。</p>}
+        </div>
+        {result.alarms.map((alarm, index) => <article className="help-alarm-record" key={alarm.id}>
+          <div className="help-alarm-title"><strong>{String(index + 1).padStart(2, "0")} · {alarm.title}</strong><span className={alarm.freshness === "stale" ? "help-active-stale" : "help-active-fresh"}>{alarm.freshness === "stale" ? "过期 · 需核实" : "本次观测触发"}</span></div>
+          <p className="help-alarm-device">1号冷却泵 · {alarm.key}</p>
+          <div className="help-alarm-times"><span>最后值 <strong>{alarm.value}</strong></span><span>服务器收到 <strong>{alarm.receivedAt}</strong></span></div>
+          <details><summary><Icon name="history" size={12} />查看来源依据</summary><div className="help-alarm-evidence"><small>模拟观测 #{alarm.observationId} · 当前发布版本 v{result.version}</small>
+            <div><strong>触发条件</strong><p>{alarm.condition}</p></div><div><strong>资料时间</strong><p>服务器收到 {alarm.receivedAt} · 查询 {result.queriedAt}</p><small>不能据此推断告警开始时间或设备根因。</small></div>
+          </div></details>
+        </article>)}
+        {result.total === 0 && <div className="help-history-empty"><strong>{result.status === "ready" ? "本次观测未触发已配置条件" : "没有足够资料判断当前告警"}</strong><p>{result.status === "ready" ? "这不是对设备健康或未来状态的保证。" : "没有检出告警不等于当前没有告警。"}</p></div>}
+        {result.total > result.alarms.length && <p className="help-active-omitted">还有 {result.total - result.alarms.length} 条未展示。本版不分页，不自动读取其余记录。</p>}
+      </>}
+    <div className="help-history-pagination"><span>重新查询将读取新的观测快照</span><button type="button" disabled={pending} onClick={onRefresh}>重新查询</button></div>
+    <p className="help-history-boundary">以服务器观测时间为准。只读本页，不代为操作，不推断根因。</p>
+  </section>;
+}
+
 function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
@@ -1045,6 +1100,7 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
   const [simulateFailure, setSimulateFailure] = useState(false);
   const [expired, setExpired] = useState(false);
   const [historyExample, setHistoryExample] = useState("records");
+  const [activeExample, setActiveExample] = useState("records");
   const lastKind = useRef("guide"), scrollToHistory = useRef(false);
   const timer = useRef(null), input = useRef(null), scroll = useRef(null), lastQuery = useRef("");
   useEffect(() => () => window.clearTimeout(timer.current), []);
@@ -1068,7 +1124,8 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
     if (!query || pending || expired) return;
     const fail = !retry && simulateFailure;
     const historyQuery = /历史|已恢复|告警记录/.test(query);
-    lastKind.current = historyQuery ? "history" : "guide";
+    const activeQuery = !historyQuery && /活动告警|当前.*告警/.test(query);
+    lastKind.current = historyQuery ? "history" : activeQuery ? "active" : "guide";
     setSimulateFailure(false);
     setError("");
     setPending(true);
@@ -1080,7 +1137,11 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
     timer.current = window.setTimeout(() => {
       setPending(false);
       if (historyQuery && publishedVersion === 0) setMessages((current) => [...current, { role: "assistant", text: "当前页面尚未发布，不能查询发布版本内的历史告警。请先手动点击顶部“发布版本”，确认发布成功后再查询。" }]);
-      else if (fail || (historyQuery && historyExample === "error" && !retry)) setError(historyQuery ? "历史查询未成功，本次没有获得记录，不能据此判断有没有告警。可重试同一个问题。" : "暂时无法连接问答服务，本次未生成回答。请重试，不需要重新输入问题。");
+      else if (fail || (historyQuery && historyExample === "error" && !retry) || (activeQuery && activeExample === "error" && !retry)) setError(historyQuery || activeQuery ? "告警查询未成功，本次没有获得新资料，不能据此判断有没有告警。可重试同一个问题。" : "暂时无法连接问答服务，本次未生成回答。请重试，不需要重新输入问题。");
+      else if (activeQuery) {
+        scrollToHistory.current = true;
+        setMessages((current) => [...current, { role: "assistant", text: "本次只读查询的固定模拟结果：", active: mockHelpActive(publishedVersion, pageId, activeExample === "error" ? "records" : activeExample) }]);
+      }
       else if (historyQuery) {
         scrollToHistory.current = true;
         setMessages((current) => [...current, { role: "assistant", text: "查询范围已限定为当前页面及发布版本。以下为固定模拟结果：", history: mockHelpHistory(publishedVersion, pageId, historyExample === "empty") }]);
@@ -1105,6 +1166,18 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
     setError("");
     setSimulateFailure(false);
   };
+  const refreshActive = (index) => {
+    if (pending || expired) return;
+    setPending(true); setError(""); lastKind.current = "active";
+    const fail = simulateFailure || activeExample === "error";
+    setSimulateFailure(false);
+    lastQuery.current = "查询当前页面活动告警";
+    timer.current = window.setTimeout(() => {
+      setPending(false);
+      if (fail) { setError("活动告警查询失败，本次没有获得新观测。旧快照仅供核对，不能当作当前结果；可重试。"); return; }
+      setMessages((current) => current.map((message, i) => i === index ? { ...message, active: mockHelpActive(publishedVersion, pageId, activeExample === "error" ? "records" : activeExample) } : message));
+    }, 650);
+  };
   const startNewSession = () => {
     setMessages([]);
     setDraft("");
@@ -1117,16 +1190,16 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
   return (
     <aside id="product-help" className="help-panel" aria-labelledby="help-title" data-help-panel data-screen-label="产品使用帮助">
       <header className="help-header">
-        <div className="help-heading"><Icon name="info" size={19} /><div><h2 id="help-title">使用帮助</h2><p>操作指南 · 历史告警只读查询</p></div></div>
+        <div className="help-heading"><Icon name="info" size={19} /><div><h2 id="help-title">使用帮助</h2><p>操作指南 · 告警只读查询</p></div></div>
         <button className="help-close" type="button" aria-label="关闭使用帮助" onClick={close}><Icon name="close" size={18} /></button>
       </header>
-      <div className="help-scope"><Icon name="lock" size={13} /><span>只读本页历史 · 不代为操作，不查询活动告警</span></div>
+      <div className="help-scope"><Icon name="lock" size={13} /><span>只读本页告警 · 不代为操作，不推断根因</span></div>
       <div className="help-page-context"><span>{pageName} <small>({pageId})</small></span><strong>{publishedVersion ? `当前发布 v${publishedVersion}` : "尚未发布"}</strong></div>
       <div className="help-conversation" ref={scroll} role="log" aria-label="帮助对话" aria-live="polite" aria-busy={pending}>
-        {messages.length === 0 && !expired && <section className="help-welcome"><div className="help-welcome-icon"><Icon name="info" size={26} /></div><h3>配置页面时遇到问题？</h3><p>问我如何添加组件、绑定数据或发布页面。也可以查询当前页面的已恢复历史，查看对应观测依据。</p><div className="help-suggestions"><button type="button" onClick={() => ask("怎样发布当前页面？")}>怎样发布当前页面？<span>↗</span></button><button type="button" onClick={() => ask("出口温度的数据键怎么设置？")}>出口温度的数据键怎么设置？<span>↗</span></button><button type="button" onClick={() => ask("怎样添加文本标题？")}>怎样添加文本标题？<span>↗</span></button><button type="button" onClick={() => ask("查询当前页面最近24小时的历史告警")}>查询当前页面历史告警<span>↗</span></button></div></section>}
-        {messages.map((message, index) => <article className={`help-message help-message--${message.role}`} key={index}><span className="help-speaker">{message.role === "user" ? "你" : "使用帮助"}</span><p>{message.text}</p>{message.history && <HelpHistoryResult history={message.history} currentVersion={publishedVersion} pending={pending || expired} onMore={() => moreHistory(index)} onRefresh={() => ask("查询当前页面历史告警")} />}{message.sources && <div className="help-sources"><span className="help-source-label">操作指南依据</span>{message.sources.map((source) => <details key={source.title}><summary><Icon name="text" size={13} /><span>{source.title}</span><span className="help-source-expand">展开原文</span></summary><div className="help-source-content"><small>docs/product-guide.md · {source.title}</small><p>{source.excerpt}</p></div></details>)}</div>}</article>)}
-        {pending && <div className="help-loading" role="status"><span className="diagnosis-spinner"></span>{lastKind.current === "history" ? "正在查询历史告警…" : "正在查阅操作指南…"}</div>}
-        {error && <div className="help-error" role="alert"><strong>{lastKind.current === "history" ? "历史查询失败" : "本次问答失败"}</strong><p>{error}</p><button type="button" onClick={() => ask(lastQuery.current, true)}>重试这条问题</button></div>}
+        {messages.length === 0 && !expired && <section className="help-welcome"><div className="help-welcome-icon"><Icon name="info" size={26} /></div><h3>配置页面时遇到问题？</h3><p>问我如何配置和发布页面。也可以查询本页的活动告警或已恢复历史，核对对应观测依据。</p><div className="help-suggestions"><button type="button" onClick={() => ask("怎样发布当前页面？")}>怎样发布当前页面？<span>↗</span></button><button type="button" onClick={() => ask("出口温度的数据键怎么设置？")}>出口温度的数据键怎么设置？<span>↗</span></button><button type="button" onClick={() => ask("怎样添加文本标题？")}>怎样添加文本标题？<span>↗</span></button><button type="button" onClick={() => ask("查询当前页面活动告警")}>查询当前页面活动告警<span>↗</span></button><button type="button" onClick={() => ask("查询当前页面最近24小时的历史告警")}>查询当前页面历史告警<span>↗</span></button></div></section>}
+        {messages.map((message, index) => <article className={`help-message help-message--${message.role}`} key={index}><span className="help-speaker">{message.role === "user" ? "你" : "使用帮助"}</span><p>{message.text}</p>{message.active && <HelpActiveResult result={message.active} currentVersion={publishedVersion} pending={pending || expired} onRefresh={() => refreshActive(index)} />}{message.history && <HelpHistoryResult history={message.history} currentVersion={publishedVersion} pending={pending || expired} onMore={() => moreHistory(index)} onRefresh={() => ask("查询当前页面历史告警")} />}{message.sources && <div className="help-sources"><span className="help-source-label">操作指南依据</span>{message.sources.map((source) => <details key={source.title}><summary><Icon name="text" size={13} /><span>{source.title}</span><span className="help-source-expand">展开原文</span></summary><div className="help-source-content"><small>docs/product-guide.md · {source.title}</small><p>{source.excerpt}</p></div></details>)}</div>}</article>)}
+        {pending && <div className="help-loading" role="status"><span className="diagnosis-spinner"></span>{lastKind.current === "history" ? "正在查询历史告警…" : lastKind.current === "active" ? "正在读取服务器最新观测…" : "正在查阅操作指南…"}</div>}
+        {error && <div className="help-error" role="alert"><strong>{lastKind.current !== "guide" ? "告警查询失败" : "本次问答失败"}</strong><p>{error}</p><button type="button" onClick={() => ask(lastQuery.current, true)}>重试这条问题</button></div>}
         {expired && <div className="help-error help-expired" role="alert"><strong>会话已过期</strong><p>闲置超过 15 分钟或服务重启，之前的上下文已失效。旧对话仅供查看，不能继续追问。</p><p>开始新会话后会清空当前对话，请重新说明问题背景。</p><button type="button" onClick={startNewSession}>开始新会话</button></div>}
       </div>
       <form className="help-composer" onSubmit={(event) => { event.preventDefault(); ask(draft); }}>
@@ -1135,7 +1208,7 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
         <div className="help-composer-actions"><span>Enter 发送 · Shift+Enter 换行</span><button type="submit" disabled={expired || pending || !draft.trim()}>{pending ? "查阅中" : "发送"}</button></div>
         <p className="help-session-note">关闭后保留 · 闲置 15 分钟过期 · 刷新后清空</p>
       </form>
-      <div className="help-demo"><span>原型 · 未连接模型</span><div className="help-demo-actions"><button type="button" disabled={pending || expired} aria-pressed={simulateFailure} onClick={() => setSimulateFailure(!simulateFailure)}>{simulateFailure ? "下次将失败" : "模拟失败"}</button><button type="button" disabled={pending || expired} onClick={expire}>模拟过期</button></div><label className="help-history-demo">历史案例<select value={historyExample} disabled={pending} onChange={(event) => setHistoryExample(event.target.value)} aria-label="历史告警原型案例"><option value="records">21条记录 · 20+1分页</option><option value="empty">无完整记录</option><option value="error">查询失败</option></select></label></div>
+      <div className="help-demo"><span>原型 · 未连接模型</span><div className="help-demo-actions"><button type="button" disabled={pending || expired} aria-pressed={simulateFailure} onClick={() => setSimulateFailure(!simulateFailure)}>{simulateFailure ? "下次将失败" : "模拟失败"}</button><button type="button" disabled={pending || expired} onClick={expire}>模拟过期</button></div><label className="help-history-demo">历史案例<select value={historyExample} disabled={pending} onChange={(event) => setHistoryExample(event.target.value)} aria-label="历史告警原型案例"><option value="records">21条记录 · 20+1分页</option><option value="empty">无完整记录</option><option value="error">查询失败</option></select></label><label className="help-history-demo">活动案例<select value={activeExample} disabled={pending} onChange={(event) => setActiveExample(event.target.value)} aria-label="活动告警原型案例"><option value="records">新鲜观测 · 2条告警</option><option value="stale">观测过期 · 保留告警</option><option value="partial">部分数据缺失</option><option value="missing">没有可用观测</option><option value="normal">观测未触发条件</option><option value="unconfigured">未配置告警条件</option><option value="limit">23条 · 仅显示20条</option><option value="error">查询失败</option></select></label></div>
     </aside>
   );
 }

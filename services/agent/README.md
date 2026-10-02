@@ -9,7 +9,7 @@
 - `src/guide.ts`：按二级标题拆分，保留三级标题及原文正文。
 - `src/search.ts`：使用 Node 内置中文分词；标题匹配权重更高，返回正分候选章节。
 - `src/guide-tool.ts`：`createGuideSearchTool(sections)` 将检索包装为 `search_product_guide` 工具。参数 Schema 只允许非空、最多 500 字符的 `query`，不接受文件路径。
-- `src/session.ts`：建立只启用指南工具的 Pi 内存会话，复用本机登录和模型偏好，隔离编程资源。
+- `src/session.ts`：建立 Pi 内存会话，复用本机登录和模型偏好；绑定页面后启用指南、历史及活动三个只读工具，隔离编程资源。
 - `src/cli.ts`：终端问答入口，同一进程复用会话，退出后释放会话与网络连接。
 - `src/conversation.ts`：HTTP 的 Pi 会话适配器，验证真实检索来源，失败回退到请求前上下文。
 - `src/http.ts`：路由、内存会话、闲置清理、去重、超时及请求安全边界。
@@ -97,6 +97,14 @@ pnpm --dir services/agent dev:http
 Vue 分页使用问题请求的可选 `historyCommand: { action: "next", queryId: "..." }`，绑定当前会话内的查询游标。服务端记住各查询范围，并把命令纳入请求编号幂等判断；不能用同一编号改换动作。业务请求仍只读，不允许模型传入查询编号来切换页面。
 
 2026-10-02：增加显式启用的 `tests/live/help-history-pagination.spec.ts`。独立测试页产生 21 条已恢复记录；真实模型网页验收 20+1 分页、固定查询截止时间、唯一记录 ID 与首尾观测展开。另以真实业务 API 验证发布 v2 后旧分页返回 `version_changed`。本轮 Agent 34 项、Web 客户端 7 项测试及 Web 构建通过。运行方式和验收边界见 `.scratch/alarm-query-agent/issues/05-live-pagination.md`。
+
+## 第三阶段：活动告警查询
+
+`read_active_alarms` 已注册到页面绑定的 Pi 会话，并通过 HTTP 与 Vue 侧栏展示真实结果。`src/active-alarms.ts` 校验当前发布版本、查询时间、来源与资料覆盖；`src/active-alarm-tool.ts` 固定当前页面并区分缺数、过期、未配置与查询失败。最多返回 20 条，故障优先，5 秒没有新服务器观测即过期。
+
+回复的可选 `active` 包含查询编号及业务快照；来源使用 `active-query:<queryId>`、`page:<pageId>:v<version>`、`observation:<id>`。模型负责选择工具，结果数量与来源由业务资料生成。一轮内不自动刷新；用户点击重新查询才读取新快照，失败保留旧快照，重试沿用请求编号。
+
+2026-10-02：Agent 40 项测试、类型检查及 Web 客户端 9 项测试、Web 构建通过。独立模拟页的真实模型网页查询展示两条过期告警，并核对实际观测 ID；发送恢复观测后重新查询得到 0 条，替换旧快照。由于查询时观测已过期，页面仍提示资料不足，未宣称当前设备正常。后端 26 项测试在前一切片通过；没有执行所有真实模型分支、全项目 E2E 或 Electron 验收。
 
 ## 显式真实模型验收
 

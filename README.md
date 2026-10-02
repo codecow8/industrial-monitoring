@@ -53,6 +53,7 @@ GET  /api/pages/{page_key}/versions/{version}
 POST /api/telemetry
 GET  /api/pages/{page_key}/alarm-evidence
 GET  /api/pages/{page_key}/alarm-history
+GET  /api/pages/{page_key}/active-alarms
 POST /api/pages/{page_key}/alarm-diagnoses
 WS   /ws/telemetry/pages/{page_key}
 ```
@@ -121,7 +122,7 @@ pnpm dev:simulator
 
 ## 产品使用帮助
 
-编辑器顶部“使用帮助”通过 Pi SDK 检索 [产品操作指南](./docs/product-guide.md)，并只读查询当前页面已恢复的历史告警。操作回答附指南来源，历史每批 20 条并支持继续查看及展开观测依据。它不修改页面、不代为发布、不查询当前活动告警或实时设备数据。
+编辑器顶部“使用帮助”通过 Pi SDK 检索 [产品操作指南](./docs/product-guide.md)，并只读查询当前页面的活动告警快照及已恢复历史。操作回答附指南来源，历史每批 20 条并支持继续查看；活动结果最多 20 条，按服务器最新观测判断，5 秒未更新标记过期，可手动重新查询并展开依据。它不修改页面、不代为发布或控制设备。
 
 Agent 要求 Node >=22.19.0，使用独立 pnpm 锁文件。先在本机 Pi 配置模型并登录，再从根目录运行：
 

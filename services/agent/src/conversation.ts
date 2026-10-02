@@ -1,6 +1,8 @@
 import { createHelpSession } from "./session.ts";
 import type { GuideToolDetails } from "./guide-tool.ts";
 import { createAlarmHistoryTool, type HistoryToolResult } from "./alarm-history-tool.ts";
+import { createActiveAlarmTool, type ActiveAlarmToolResult } from "./active-alarm-tool.ts";
+import { validateActiveAlarms } from "./active-alarms.ts";
 
 export interface GuideSource {
   source: string;
@@ -11,6 +13,7 @@ export interface HelpReply {
   answer: string;
   sources: GuideSource[];
   history?: HistoryToolResult;
+  active?: ActiveAlarmToolResult;
 }
 export interface HelpConversation {
   ask(question: string, signal: AbortSignal, command?: HistoryCommand): Promise<HelpReply>;
@@ -54,8 +57,41 @@ export function buildHistoryReply(history: HistoryToolResult): HelpReply {
   return { answer, sources, history };
 }
 
+/** 活动结果对应查询时刻；数量、覆盖率与来源都由业务资料生成，不接受模型补写。 */
+export function buildActiveReply(active: ActiveAlarmToolResult): HelpReply {
+  if (active.status === "error") throw new Error("活动告警查询失败。");
+  if (!active.data) return { answer: active.notice, sources: [], active };
+  if (!active.queryId) throw new Error("活动查询缺少来源标识。");
+  const data = validateActiveAlarms(active.data, active.data.pageId);
+  if (active.status !== data.status) throw new Error("活动查询状态不一致。");
+  const sources: GuideSource[] = [{ source: `active-query:${active.queryId}`, title: `活动查询 · ${data.pageId} · v${data.version}`,
+    content: JSON.stringify({ pageId: data.pageId, version: data.version, publishedAt: data.publishedAt,
+      queriedAt: data.queriedAt, windowStart: data.windowStart, total: data.total, omitted: data.omitted, coverage: data.coverage }) },
+    { source: `page:${data.pageId}:v${data.version}`, title: `页面条件 · v${data.version}`,
+      content: JSON.stringify({ publishedAt: data.publishedAt, conditions: data.alarms.map(({ id, kind, dataKey, threshold, stateCode }) => ({ id, kind, dataKey, threshold, stateCode })) }) }];
+  const seen = new Set<number>();
+  for (const item of [...data.alarms, ...data.coverage.stale]) {
+    if (seen.has(item.observation.id)) continue;
+    seen.add(item.observation.id);
+    sources.push({ source: `observation:${item.observation.id}`, title: `${item.dataKey} · 服务器观测`,
+      content: JSON.stringify({ dataKey: item.dataKey, ...item.observation }) });
+  }
+  const answer = `当前页面 ${data.pageId} · v${data.version}，查询时刻 ${data.queriedAt}。本次已观测触发 ${data.total} 条，展示 ${data.alarms.length} 条，另有 ${data.omitted} 条未展示。${active.notice}`;
+  return { answer, sources, active };
+}
+
 export async function createHelpConversation(context: { pageId?: string } = {}): Promise<HelpConversation> {
   const historyTool = context.pageId ? createAlarmHistoryTool(context.pageId) : undefined;
+  const activeTool = context.pageId ? createActiveAlarmTool(context.pageId) : undefined;
+  let activeResult: ActiveAlarmToolResult | undefined;
+  const activeExecute = activeTool?.execute;
+  if (activeTool && activeExecute) activeTool.execute = async (id, params, signal) => {
+    // 一轮内重复调用只复用一次观测快照；下一轮用户明确重新查询才读取新资料。
+    if (activeResult) return { content: [{ type: "text", text: JSON.stringify(activeResult) }], details: activeResult };
+    const result = await activeExecute(id, params, signal);
+    activeResult = result.details;
+    return result;
+  };
   let historyResult: HistoryToolResult | undefined;
   const getHistoryResult = (): HistoryToolResult | undefined => historyResult;
   let allowNext = false;
@@ -76,7 +112,7 @@ export async function createHelpConversation(context: { pageId?: string } = {}):
     historyResult = result.details;
     return result;
   };
-  const session = await createHelpSession({ pageId: context.pageId, historyTool });
+  const session = await createHelpSession({ pageId: context.pageId, historyTool, activeTool });
   if (!session.model) {
     session.dispose();
     throw new Error("Pi 尚未配置可用模型。");
@@ -89,6 +125,7 @@ export async function createHelpConversation(context: { pageId?: string } = {}):
       const checkpoint = session.sessionManager.getLeafId()!;
       const historyCheckpoint = historyTool?.checkpoint();
       historyResult = undefined;
+      activeResult = undefined;
       historyCommand = command;
       allowNext = command ? command.action === "next" : /继续|下一页|下一批|更多/.test(question);
       let retrieved: GuideSource[] | undefined;
@@ -109,7 +146,9 @@ export async function createHelpConversation(context: { pageId?: string } = {}):
         }
         const businessResult = getHistoryResult();
         if (command && !businessResult) throw new Error("本轮未执行请求的历史查询。");
-        return businessResult ? buildHistoryReply(businessResult) : buildGuideReply(session.getLastAssistantText() ?? "", retrieved);
+        if (command || (businessResult && !activeResult)) return buildHistoryReply(businessResult!);
+        if (activeResult) return buildActiveReply(activeResult);
+        return buildGuideReply(session.getLastAssistantText() ?? "", retrieved);
       } catch (error) {
         await session.navigateTree(checkpoint, { summarize: false });
         // 工具主动判定旧快照失效时不复活它；模型失败则回退已推进的正常游标。

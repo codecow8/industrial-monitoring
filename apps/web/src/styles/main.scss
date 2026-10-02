@@ -132,7 +132,8 @@ button { border: 0; }
 .palette-note { position: absolute; left: 18px; right: 18px; bottom: 20px; display: flex; align-items: center; gap: 9px; color: #95a4af; font-size: 11px; white-space: nowrap; }
 .palette-note span { height: 1px; flex: 1; background: #ccd5dc; }
 
-.canvas-viewport { position: relative; grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; overflow: auto; background: var(--ink-900); }
+// 将选中框和缩放手柄限制在画布层级内，避免盖住固定的帮助侧栏。
+.canvas-viewport { position: relative; isolation: isolate; grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; overflow: auto; background: var(--ink-900); }
 .canvas-tools { position: sticky; z-index: 10; top: 12px; left: 14px; width: fit-content; height: 36px; display: flex; gap: 2px; padding: 3px; margin-bottom: -36px; background: rgba(8, 22, 33, 0.88); border: 1px solid rgba(109, 151, 179, 0.25); border-radius: 4px; box-shadow: 0 9px 24px rgba(0, 0, 0, 0.2); }
 .canvas-tool { width: 30px; height: 28px; display: grid; place-items: center; color: #8da4b6; background: transparent; border-radius: 2px; cursor: pointer; }
 .canvas-tool:hover:not(:disabled), .canvas-tool--active { color: var(--cyan); background: rgba(36, 160, 176, 0.16); }

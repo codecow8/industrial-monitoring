@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
-import { productHelp, retryHelp, sendHelp, startNewHelpSession, bindHelpPage, moreHelpHistory, queryHelpHistory } from "../src/data/productHelp.ts";
+import { productHelp, retryHelp, sendHelp, startNewHelpSession, bindHelpPage, moreHelpHistory, queryHelpHistory, queryHelpActive, refreshHelpActive } from "../src/data/productHelp.ts";
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -166,4 +166,55 @@ test("版本变化不追加或继续旧数据，分页失败重试保留编号",
   assert.equal(productHelp.messages[1].history?.status, "version_changed");
   await moreHelpHistory(id);
   assert.equal(calls, 3);
+});
+
+function activePage(id = 101, value = 83) {
+  return { pageId: "demo", version: 1, publishedAt: "2026-10-02T09:00:00Z", queriedAt: "2026-10-02T10:00:01Z",
+    windowStart: "2026-10-02T09:00:00Z", staleAfterSeconds: 5, status: "ready",
+    coverage: { configured: 1, observed: 1, missing: [], stale: [] }, total: 1, omitted: 0,
+    alarms: [{ id: "threshold:pump.temp:80", kind: "threshold", title: "温度越界", dataKey: "pump.temp", deviceName: "泵",
+      threshold: 80, unit: "°C", precision: 1, freshness: "fresh", observation: { id, value, receivedAt: "2026-10-02T10:00:00Z", sourceTimestamp: "device-time" } }] };
+}
+
+test("活动重新查询替换快照不追加记录，失败保留旧结果，重试沿用编号", async () => {
+  bindHelpPage("demo");
+  const ids: string[] = [];
+  let calls = 0;
+  globalThis.fetch = async (url, init) => {
+    const body = JSON.parse(init?.body as string);
+    if (String(url).endsWith("/sessions")) return json({ sessionId: "active" });
+    ids.push(body.requestId);
+    if (++calls === 2) return json({ error: { code: "MODEL_ERROR", message: "本次查询失败" } }, 502);
+    const active = { status: "ready", notice: "本次快照", queryId: crypto.randomUUID(), data: activePage(calls === 1 ? 101 : 102) };
+    return json({ requestId: body.requestId, answer: "来源可靠", sources: [], active });
+  };
+  await queryHelpActive();
+  const id = productHelp.messages[1].id;
+  assert.equal(productHelp.messages[1].active?.data?.alarms[0].observation.id, 101);
+  await refreshHelpActive(id);
+  assert.equal(productHelp.messages[1].active?.data?.alarms[0].observation.id, 101);
+  assert.equal(productHelp.error, "本次查询失败");
+  await retryHelp();
+  assert.equal(ids[1], ids[2]);
+  assert.equal(productHelp.messages.length, 2);
+  assert.equal(productHelp.messages[1].active?.data?.alarms[0].observation.id, 102);
+});
+
+test("活动无数据保留资料不足状态，拒绝错误页或伪装正常的响应", async () => {
+  bindHelpPage("demo");
+  const data = { ...activePage(), status: "no_data", total: 0, alarms: [], coverage: { configured: 1, observed: 0, missing: ["pump.temp"], stale: [] } };
+  globalThis.fetch = async (url, init) => String(url).endsWith("/sessions") ? json({ sessionId: "missing" })
+    : json({ requestId: JSON.parse(init?.body as string).requestId, answer: "没有资料", sources: [], active: { status: "no_data", queryId: "q1", notice: "无法判断", data } });
+  await queryHelpActive();
+  assert.equal(productHelp.messages[1].active?.status, "no_data");
+  assert.deepEqual(productHelp.messages[1].active?.data?.coverage.missing, ["pump.temp"]);
+
+  for (const invalid of [{ ...data, pageId: "other" }, { ...data, status: "ready" }]) {
+    startNewHelpSession();
+    globalThis.fetch = async (url, init) => String(url).endsWith("/sessions") ? json({ sessionId: "invalid" })
+      : json({ requestId: JSON.parse(init?.body as string).requestId, answer: "正常", sources: [], active: { status: invalid.status, queryId: "q2", notice: "正常", data: invalid } });
+    await queryHelpActive();
+    assert.equal(productHelp.messages.length, 1);
+    assert.ok(productHelp.error.includes("资料合同"));
+  }
 });
