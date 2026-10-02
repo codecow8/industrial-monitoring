@@ -1,6 +1,6 @@
 # Industrial Monitoring
 
-工业智能监控与巡检平台。编辑器通过统一 `PageSchema` 配置指标卡、实时趋势图、设备状态和活动告警列表，运行态使用同一个 Renderer 和组件注册表读取并渲染；草稿通过 FastAPI 校验并保存到 PostgreSQL，发布后生成不可变版本供运行态读取。
+工业智能监控与巡检平台。编辑器通过统一 `PageSchema` 配置指标卡、实时趋势图、设备状态、活动告警列表和纯文本块，运行态使用同一个 Renderer 和组件注册表读取并渲染；草稿通过 FastAPI 校验并保存到 PostgreSQL，发布后生成不可变版本供运行态读取。
 
 ## Task 1 范围
 
@@ -22,9 +22,10 @@ apps/web                 编辑器与运行态入口
 apps/electron            复用 Web Renderer 的安全 Electron 桌面壳
 packages/schema          PageSchema 与运行时校验
 packages/renderer-core   不依赖 Pinia 的 DOM Renderer
-packages/components-web  指标卡、实时趋势图、设备状态、活动告警列表和 Web 组件注册表
+packages/components-web  指标卡、实时趋势图、设备状态、活动告警列表、纯文本块和 Web 组件注册表
 packages/telemetry-client WebSocket 会话、帧合并、过期与重连状态
 services/api             FastAPI 页面/遥测接口与 Alembic 迁移
+services/agent           Pi SDK 产品使用问答，仅本机、只读指南检索
 services/simulator       每秒推送确定性温度和设备状态序列的独立 Python 进程
 fixtures                 前后端共享的 PageSchema 合同和样例
 ```
@@ -57,6 +58,8 @@ WS   /ws/telemetry/pages/{page_key}
 ```
 
 运行态只读取 `published`，不会直接显示尚未发布的草稿修改。
+
+纯文本块支持多行内容、12–64 的字号、十六进制文字颜色和左/中/右对齐。编辑器可添加多个文本块并复用拖动、缩放、保存和发布；运行态仅显示文字，不绑定 Data Point，不解析 HTML、Markdown 或富文本。
 
 告警证据接口按已发布页面中的 `kind`（`threshold` / `fault`）、`dataKey`、`start` 和 `end` 查询。阈值告警还需提供 `threshold`。`start`、`end` 使用带时区的 ISO 8601 时间，单次最多 15 分钟和 1000 条观测。响应包含页面发布版本、观测记录 ID、来源时间、服务端接收时间和可由相邻观测证明的触发/恢复转折；查询可跨越发布时间，但当前版本发布前的观测不会按新规则解释。缺少前一条正常观测时，不推断告警起点。模拟遥测在 PostgreSQL 保留 24 小时，并于后续遥测写入时清理过期记录。
 
@@ -114,7 +117,22 @@ pnpm dev
 pnpm dev:simulator
 ```
 
-默认地址：`http://127.0.0.1:5173/editor/demo`。Vite 将 `/api` 和 `/ws` 代理到 `http://127.0.0.1:8000`。发布 `demo` 页后打开运行态，指标卡会按 `68.4 → 72.0 → 78.5 → 81.2 → 83.0 → 79.0 → 74.0` 循环更新，设备状态会按“运行 → 维护 → 运行 → 故障 → 停止 → 运行”循环更新。
+默认地址：`http://127.0.0.1:5173/editor/demo`。Vite 将业务 `/api` 和 `/ws` 代理到 `http://127.0.0.1:8000`，`/api/help` 单独代理到 8001。发布 `demo` 页后打开运行态，指标卡会按 `68.4 → 72.0 → 78.5 → 81.2 → 83.0 → 79.0 → 74.0` 循环更新，设备状态会按“运行 → 维护 → 运行 → 故障 → 停止 → 运行”循环更新。
+
+## 产品使用帮助
+
+编辑器顶部“使用帮助”通过 Pi SDK 检索 [产品操作指南](./docs/product-guide.md)，回答附可展开的原文来源。它只提供操作指导，不修改页面、不代为发布、不查询实时设备数据。
+
+Agent 要求 Node >=22.19.0，使用独立 pnpm 锁文件。先在本机 Pi 配置模型并登录，再从根目录运行：
+
+```bash
+pnpm --dir services/agent install --frozen-lockfile
+pnpm dev:agent
+```
+
+服务仅监听 `127.0.0.1:8001`，复用 Pi 登录，不复用上文告警分析的 DeepSeek 环境变量。网页侧栏关闭后保留本次对话、刷新后清空，后台闲置 15 分钟后清理；过期需要主动开始新会话。当前不开放 Electron 或多人共享个人登录。
+
+客户端测试为 `pnpm --filter @industrial/web test:help`，Agent 测试为 `pnpm --dir services/agent test`。真实模型验收需显式启用，不随普通测试运行。更多启动、安全边界及验收说明见 [Agent README](./services/agent/README.md)。
 
 ## Electron 桌面壳
 

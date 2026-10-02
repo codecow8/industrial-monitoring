@@ -39,7 +39,7 @@ const alarmSummary = computed(() => {
 });
 
 function dataPointFor(node: ComponentNode): DataPointView {
-  if (node.type === "alarm-list") return waitingPoint;
+  if (node.type === "alarm-list" || node.type === "text-block") return waitingPoint;
   if (props.dataPoints === undefined) {
     return node.type === "device-state" ? previewDeviceState : previewPoint;
   }
@@ -67,7 +67,7 @@ function dataPointFor(node: ComponentNode): DataPointView {
       <component
         :is="registry[node.type]"
         :node="node"
-        :data-point="node.type === 'alarm-list' ? undefined : dataPointFor(node)"
+        :data-point="node.type === 'alarm-list' || node.type === 'text-block' ? undefined : dataPointFor(node)"
         :trend-samples="node.type === 'trend-chart' ? (trendSamples?.[node.props.dataKey] ?? []) : undefined"
         :alarm-summary="node.type === 'alarm-list' ? alarmSummary : undefined"
         :example="node.type === 'alarm-list' && dataPoints === undefined"

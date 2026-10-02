@@ -57,6 +57,24 @@ def test_missing_draft_is_an_empty_result_instead_of_an_error() -> None:
     assert response.content == b""
 
 
+def test_text_block_can_be_saved_and_published_without_rewriting_content() -> None:
+    page_id = f"text-{uuid4()}"
+    schema = valid_schema(page_id)
+    schema["components"].append({
+        "id": "text-heading-01", "type": "text-block",
+        "position": {"x": 410, "y": 38}, "size": {"width": 500, "height": 88},
+        "props": {"content": "冷却泵监控\n请核对现场状态", "fontSize": 28, "color": "#8bd4e5", "align": "center"},
+    })
+
+    with TestClient(app) as client:
+        saved = client.put(f"/api/pages/{page_id}/draft", json=schema)
+        published = client.post(f"/api/pages/{page_id}/publish") if saved.status_code == 200 else None
+
+    assert saved.status_code == 200
+    assert published is not None and published.status_code == 200
+    assert published.json()["schema"]["components"][1]["props"] == schema["components"][1]["props"]
+
+
 def test_published_version_stays_stable_until_the_next_publish() -> None:
     page_id = f"publish-{uuid4()}"
     draft_a = valid_schema(page_id)

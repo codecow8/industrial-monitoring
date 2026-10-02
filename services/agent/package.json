@@ -1,0 +1,23 @@
+{
+  "name": "@industrial/agent",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@12.4.1",
+  "scripts": {
+    "test": "node --experimental-strip-types --test src/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "dev": "node --experimental-strip-types src/cli.ts",
+    "dev:http": "node --experimental-strip-types src/http-main.ts",
+    "eval:help": "node --experimental-strip-types evals/help-remaining.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.0.0",
+    "typebox": "1.3.27",
+    "undici": "8.10.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3"
+  }
+}

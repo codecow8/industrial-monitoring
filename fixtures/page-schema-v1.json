@@ -357,6 +357,98 @@
               }
             },
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "type",
+              "position",
+              "size",
+              "props"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": {
+                "type": "string",
+                "const": "text-block"
+              },
+              "position": {
+                "type": "object",
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                }
+              },
+              "size": {
+                "type": "object",
+                "required": [
+                  "width",
+                  "height"
+                ],
+                "properties": {
+                  "width": {
+                    "type": "number",
+                    "minimum": 180
+                  },
+                  "height": {
+                    "type": "number",
+                    "minimum": 48
+                  }
+                }
+              },
+              "props": {
+                "type": "object",
+                "required": [
+                  "content",
+                  "fontSize",
+                  "color",
+                  "align"
+                ],
+                "properties": {
+                  "content": {
+                    "type": "string"
+                  },
+                  "fontSize": {
+                    "type": "integer",
+                    "minimum": 12,
+                    "maximum": 64
+                  },
+                  "color": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
+                  "align": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "left"
+                      },
+                      {
+                        "type": "string",
+                        "const": "center"
+                      },
+                      {
+                        "type": "string",
+                        "const": "right"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "additionalProperties": false
           }
         ]
       }

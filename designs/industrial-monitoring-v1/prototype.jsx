@@ -190,6 +190,10 @@ function AlarmList({ node, alarms = [], freshness = "fresh", ageSeconds = 0, exa
   );
 }
 
+function TextBlock({ node, onPointerDown }) {
+  return <div className={`text-block ${onPointerDown ? "draggable" : ""}`} onPointerDown={onPointerDown} style={{ fontSize: `${node.props.fontSize}px`, color: node.props.color, textAlign: node.props.align }}><span style={{ width: "100%" }}>{node.props.content}</span></div>;
+}
+
 function ComponentPalette({ showToast }) {
   const items = [
     { name: "指标卡", icon: "chart", active: true },
@@ -663,10 +667,10 @@ function TrendChart({ node, samples, now, freshness = "fresh", ageSeconds = 0, o
   );
 }
 
-function TrendPalette({ addTrend, addDeviceState, addAlarmList, showToast }) {
+function TrendPalette({ addText, addTrend, addDeviceState, addAlarmList, showToast }) {
   const items = [
     { name: "指标卡", icon: "chart", active: true, action: () => showToast("指标卡已在画布中") },
-    { name: "文本", icon: "text" },
+    { name: "文本", icon: "text", active: true, action: addText },
     { name: "折线图", icon: "line", active: true, action: addTrend },
     { name: "设备状态", icon: "device", active: true, action: addDeviceState },
     { name: "告警列表", icon: "bell", active: true, action: addAlarmList },
@@ -678,17 +682,25 @@ function TrendInspector({ node, updateProp, schemaText, copySchema }) {
   const isMetric = node.type === "metric-card";
   const isDeviceState = node.type === "device-state";
   const isAlarmList = node.type === "alarm-list";
+  const isText = node.type === "text-block";
   const setNumber = (key, value) => updateProp(key, Number(value));
   return <aside className="right-panel" aria-label="属性配置"><div className="panel-title">属性配置</div><section className="inspector-section"><div className="panel-heading"><span className="section-title">基础属性</span><span className="type-code">{node.type}</span></div><div className="field-list">
+    {isText ? <>
+      <div className="field text-content-field"><label htmlFor="textContent">文本内容</label><textarea id="textContent" rows="4" value={node.props.content} onChange={(event) => updateProp("content", event.target.value)} /></div>
+      <div className="field"><label htmlFor="fontSize">字号</label><input id="fontSize" type="number" min="12" max="64" value={node.props.fontSize} onChange={(event) => updateProp("fontSize", Math.max(12, Math.min(64, Number(event.target.value) || 12)))} /></div>
+      <div className="field"><label htmlFor="textColor">文字颜色</label><div className="color-control"><input id="textColor" type="color" value={node.props.color} onChange={(event) => updateProp("color", event.target.value)} /><span>{node.props.color}</span></div></div>
+      <div className="field"><label htmlFor="textAlign">对齐方式</label><select id="textAlign" value={node.props.align} onChange={(event) => updateProp("align", event.target.value)}><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></div>
+    </> : <>
     {(isMetric || isDeviceState) && <div className="field"><label htmlFor="deviceName">设备名称</label><input id="deviceName" value={node.props.deviceName} onChange={(event) => updateProp("deviceName", event.target.value)} /></div>}
     <div className="field"><label htmlFor="title">{isMetric ? "指标标题" : isAlarmList || isDeviceState ? "组件标题" : "图表标题"}</label><input id="title" value={node.props.title} onChange={(event) => updateProp("title", event.target.value)} /></div>
     {!isAlarmList && <div className="field"><label htmlFor="dataKey">数据键</label><input id="dataKey" value={node.props.dataKey} onChange={(event) => updateProp("dataKey", event.target.value)} /></div>}
     {!isDeviceState && !isAlarmList && <><div className="field"><label htmlFor="unit">单位</label><input id="unit" value={node.props.unit} onChange={(event) => updateProp("unit", event.target.value)} /></div><div className="field"><label htmlFor="precision">小数位</label><input id="precision" type="number" min="0" max="3" value={node.props.precision} onChange={(event) => setNumber("precision", event.target.value)} /></div><div className="field"><label htmlFor="threshold">告警阈值</label><input id="threshold" type="number" value={node.props.alarmThreshold} onChange={(event) => setNumber("alarmThreshold", event.target.value)} /></div></>}
+    </>}
   </div></section><section className="inspector-section"><div className="schema-heading"><span className="section-title">Schema 预览</span><button className="link-button" type="button" onClick={copySchema}><Icon name="copy" size={13} />复制</button></div><pre className="schema-code">{schemaText}</pre></section></aside>;
 }
 
 function TrendDesignDrawer({ onClose }) {
-  return <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><aside className="design-drawer" role="dialog" aria-modal="true" aria-labelledby="design-title"><header className="drawer-header"><div><h2 id="design-title">智能分析原型</h2><p>从一条活动告警出发，把观测事实、可能原因和建议检查分开呈现。</p></div><button className="close-button" type="button" aria-label="关闭" onClick={onClose}><Icon name="close" /></button></header><section className="decision-block"><h3>本次验证什么</h3><p>操作员能看懂分析依赖了哪些观测与资料，哪些说法仍需现场核实。</p></section><section className="decision-block"><h3>评审路径</h3><ul><li>加入告警列表并发布，进入运行态。</li><li>触发温度告警，在告警行点击“智能分析”。</li><li>检查完整证据、证据不足、加载和失败四种状态。</li><li>触发设备故障，确认打开的是对应告警。</li></ul></section><section className="decision-block"><h3>边界</h3><p>本原型使用固定模拟案例，不调用真实模型或诊断接口，也不控制设备。</p></section></aside></div>;
+  return <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><aside className="design-drawer" role="dialog" aria-modal="true" aria-labelledby="design-title"><header className="drawer-header"><div><h2 id="design-title">运行态组件原型</h2><p>沿用同一画布，评审文本组件与已有告警分析交互。</p></div><button className="close-button" type="button" aria-label="关闭" onClick={onClose}><Icon name="close" /></button></header><section className="decision-block"><h3>本次评审 · 文本组件</h3><p>点击组件栏“文本”，编辑多行内容、字号、颜色和对齐；拖动或缩放后发布，运行态只显示纯文字。</p></section><section className="decision-block"><h3>已有能力 · 智能分析</h3><p>从活动告警打开分析面板，区分观测事实、待核实原因与建议检查，并展示证据来源。</p></section><section className="decision-block"><h3>边界</h3><p>文本组件不支持富文本、Markdown、HTML 或实时 Data Point 绑定。</p></section></aside></div>;
 }
 
 function DiagnosisDrawer({ alarm, status, stale, resolved, onClose, onRetry, onSetStatus }) {
@@ -805,14 +817,14 @@ function TrendRuntime({ published, onBack }) {
   useEffect(() => { if (!historyOpen) return undefined; const onKeyDown = (event) => { if (event.key === "Escape") closeHistory(); }; window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown); }, [historyOpen]);
   useEffect(() => () => window.clearTimeout(historyTimerRef.current), []);
   return <main className="runtime" data-screen-label="运行态趋势预览"><header className="runtime-topbar"><div className="runtime-title"><strong>{page?.name ?? "运行态"}</strong><span>{published ? `发布版本 · v${published.version}` : "尚未发布"}</span></div><div className="runtime-actions"><span className={`runtime-status ${connection} ${freshness}`}>{connectionText}</span><button className="btn btn-secondary" type="button" onClick={onBack}><span className="button-content"><Icon name="arrowLeft" />返回编辑器</span></button></div></header><section className="runtime-canvas">
-    {page ? page.components.map((node) => <div key={node.id} className="runtime-component" style={{ left: node.position.x, top: node.position.y, width: node.size.width, height: node.size.height }}>{node.type === "metric-card" ? <MetricCard schema={node} value={value} freshness={freshness} ageSeconds={ageSeconds} /> : node.type === "device-state" ? <DeviceStateCard node={node} stateCode={deviceState} freshness={freshness} ageSeconds={ageSeconds} /> : node.type === "alarm-list" ? <AlarmList node={node} alarms={activeAlarms} freshness={freshness} ageSeconds={ageSeconds} onAnalyze={openAnalysis} onHistory={openHistory} /> : <TrendChart node={node} samples={samples} now={now} freshness={freshness} ageSeconds={ageSeconds} />}</div>) : <div className="runtime-empty" role="status"><strong>页面尚未发布</strong><span>返回编辑器发布后才会显示页面内容。</span></div>}
+    {page ? page.components.map((node) => <div key={node.id} className={`runtime-component ${node.type === "text-block" ? "runtime-text" : ""}`} style={{ left: node.position.x, top: node.position.y, width: node.size.width, height: node.size.height }}>{node.type === "text-block" ? <TextBlock node={node} /> : node.type === "metric-card" ? <MetricCard schema={node} value={value} freshness={freshness} ageSeconds={ageSeconds} /> : node.type === "device-state" ? <DeviceStateCard node={node} stateCode={deviceState} freshness={freshness} ageSeconds={ageSeconds} /> : node.type === "alarm-list" ? <AlarmList node={node} alarms={activeAlarms} freshness={freshness} ageSeconds={ageSeconds} onAnalyze={openAnalysis} onHistory={openHistory} /> : <TrendChart node={node} samples={samples} now={now} freshness={freshness} ageSeconds={ageSeconds} />}</div>) : <div className="runtime-empty" role="status"><strong>页面尚未发布</strong><span>返回编辑器发布后才会显示页面内容。</span></div>}
     {page && <><div className="prototype-controls" aria-label="原型演示控制"><strong>遥测演示</strong><button className={paused ? "active" : ""} type="button" onClick={() => setPaused((current) => !current)}>{paused ? "恢复上报" : "暂停上报"}</button><button type="button" onClick={() => { setPaused(true); setConnection("connected"); appendValue(83.0); }}>触发告警</button><button type="button" onClick={disconnect}>模拟断线</button><button type="button" onClick={recover}>恢复正常</button></div><div className="prototype-controls device-controls" aria-label="Device State 演示控制"><strong>DEVICE STATE</strong><button type="button" onClick={() => selectDeviceState(1)}>运行</button><button type="button" onClick={() => selectDeviceState(3)}>维护</button><button type="button" onClick={() => selectDeviceState(2)}>故障</button><button type="button" onClick={() => selectDeviceState(0)}>停止</button><button type="button" onClick={() => selectDeviceState(9)}>未知</button></div></>}<div className="runtime-note">活动告警由当前页面的遥测与 Schema 实时计算；数据过期不会自动清除已有告警。</div>
     {analysisAlarm && <DiagnosisDrawer alarm={analysisAlarm} status={analysisStatus} stale={freshness === "stale"} resolved={!activeAlarms.some((item) => item.id === analysisAlarm.id)} onClose={closeAnalysis} onRetry={() => openAnalysis(analysisAlarm)} onSetStatus={setAnalysisVariant} />}
     {historyOpen && <HistoryDrawer status={historyStatus} onClose={closeHistory} onRetry={openHistory} onSetStatus={(nextStatus) => { window.clearTimeout(historyTimerRef.current); setHistoryStatus(nextStatus); }} />}
     </section></main>;
 }
 
-function TrendEditor({ pageSchema, setPageSchema, onPreview, onPublish, publishedVersion }) {
+function TrendEditor({ pageSchema, setPageSchema, onPreview, onPublish, publishedVersion, onHelp }) {
   const canvasRef = useRef(null), pointerRef = useRef(null);
   const [selectedId, setSelectedId] = useState(pageSchema.components[0].id), [toast, setToast] = useState(""), [drawerOpen, setDrawerOpen] = useState(false), [savedAt, setSavedAt] = useState("已自动保存"), [contextMenu, setContextMenu] = useState(null), [lastDeleted, setLastDeleted] = useState(null);
   const selected = pageSchema.components.find((node) => node.id === selectedId) ?? pageSchema.components[0];
@@ -822,6 +834,7 @@ function TrendEditor({ pageSchema, setPageSchema, onPreview, onPublish, publishe
   const updateNode = (id, updater) => setPageSchema((current) => ({ ...current, components: current.components.map((node) => node.id === id ? updater(node) : node) }));
   const updateProp = (key, value) => { updateNode(selectedId, (node) => ({ ...node, props: { ...node.props, [key]: value } })); setSavedAt("有未保存修改"); };
   const addTrend = () => { const existing = pageSchema.components.find((node) => node.type === "trend-chart"); if (existing) { setSelectedId(existing.id); showToast("趋势图已在画布中"); return; } const trend = { id: "trend-pump-01", type: "trend-chart", position: { x: 80, y: 405 }, size: { width: 720, height: 300 }, props: { title: "1号冷却泵出口温度趋势", dataKey: "pump1.outlet_temp", unit: "°C", precision: 1, alarmThreshold: 80 } }; setPageSchema((current) => ({ ...current, components: [...current.components, trend] })); setSelectedId(trend.id); setSavedAt("有未保存修改"); showToast("已添加折线图"); };
+  const addText = () => { const count = pageSchema.components.filter((node) => node.type === "text-block").length; const text = { id: `text-${Date.now()}`, type: "text-block", position: { x: 410 + count * 18, y: 38 + count * 18 }, size: { width: 500, height: 88 }, props: { content: "冷却系统运行概览", fontSize: 24, color: "#dcebf3", align: "left" } }; setPageSchema((current) => ({ ...current, components: [...current.components, text] })); setSelectedId(text.id); setSavedAt("有未保存修改"); showToast("已添加文本"); };
   const addDeviceState = () => { const existing = pageSchema.components.find((node) => node.type === "device-state"); if (existing) { setSelectedId(existing.id); showToast("设备状态已在画布中"); return; } const deviceState = { id: "device-state-pump-01", type: "device-state", position: { x: 610, y: 130 }, size: { width: 300, height: 180 }, props: { deviceName: "1号冷却泵", title: "设备运行状态", dataKey: "pump1.operating_state" } }; setPageSchema((current) => ({ ...current, components: [...current.components, deviceState] })); setSelectedId(deviceState.id); setSavedAt("有未保存修改"); showToast("已添加设备状态"); };
   const addAlarmList = () => { const existing = pageSchema.components.find((node) => node.type === "alarm-list"); if (existing) { setSelectedId(existing.id); showToast("告警列表已在画布中"); return; } const alarmList = { id: "alarm-list-main", type: "alarm-list", position: { x: 830, y: 370 }, size: { width: 520, height: 300 }, props: { title: "活动告警" } }; setPageSchema((current) => ({ ...current, components: [...current.components, alarmList] })); setSelectedId(alarmList.id); setSavedAt("有未保存修改"); showToast("已添加告警列表"); };
   const startPointer = (event, node, mode, direction = "") => {
@@ -833,8 +846,8 @@ function TrendEditor({ pageSchema, setPageSchema, onPreview, onPublish, publishe
       startX: event.clientX, startY: event.clientY,
       x: node.position.x, y: node.position.y,
       width: node.size.width, height: node.size.height,
-      offsetX: event.clientX - rect.left - node.position.x,
-      offsetY: event.clientY - rect.top - node.position.y,
+      offsetX: event.clientX - rect.left + canvasRef.current.scrollLeft - node.position.x,
+      offsetY: event.clientY - rect.top + canvasRef.current.scrollTop - node.position.y,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -845,8 +858,8 @@ function TrendEditor({ pageSchema, setPageSchema, onPreview, onPublish, publishe
       const dx = event.clientX - state.startX;
       const dy = event.clientY - state.startY;
       updateNode(state.id, (node) => {
-        const minWidth = node.type === "trend-chart" ? 480 : node.type === "alarm-list" ? 420 : 260;
-        const minHeight = node.type === "trend-chart" ? 240 : node.type === "alarm-list" ? 220 : node.type === "device-state" ? 160 : 200;
+        const minWidth = node.type === "trend-chart" ? 480 : node.type === "alarm-list" ? 420 : node.type === "text-block" ? 180 : 260;
+        const minHeight = node.type === "trend-chart" ? 240 : node.type === "alarm-list" ? 220 : node.type === "device-state" ? 160 : node.type === "text-block" ? 48 : 200;
         let x = state.x, y = state.y, width = state.width, height = state.height;
         if (state.direction.includes("r")) width = Math.max(minWidth, state.width + dx);
         if (state.direction.includes("b")) height = Math.max(minHeight, state.height + dy);
@@ -861,11 +874,12 @@ function TrendEditor({ pageSchema, setPageSchema, onPreview, onPublish, publishe
         return { ...node, position: { x: Math.round(x), y: Math.round(y) }, size: { width: Math.round(width), height: Math.round(height) } };
       });
     } else {
-      const rect = canvasRef.current.getBoundingClientRect();
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
       const node = pageSchema.components.find((item) => item.id === state.id);
       updateNode(state.id, (current) => ({ ...current, position: {
-        x: Math.max(16, Math.round(Math.min(rect.width - node.size.width - 16, event.clientX - rect.left - state.offsetX))),
-        y: Math.max(16, Math.round(Math.min(rect.height - node.size.height - 16, event.clientY - rect.top - state.offsetY))),
+        x: Math.max(16, Math.round(Math.min(canvas.scrollWidth - node.size.width - 16, event.clientX - rect.left + canvas.scrollLeft - state.offsetX))),
+        y: Math.max(16, Math.round(Math.min(canvas.scrollHeight - node.size.height - 16, event.clientY - rect.top + canvas.scrollTop - state.offsetY))),
       } }));
     }
     setSavedAt("有未保存修改");
@@ -881,7 +895,7 @@ function TrendEditor({ pageSchema, setPageSchema, onPreview, onPublish, publishe
     { id: "example-fault", kind: "fault", title: "设备故障", deviceName: "1号冷却泵", detail: "设备运行状态", valueText: "状态码 2", thresholdText: "检测到设备故障" },
     { id: "example-threshold", kind: "threshold", title: "出口温度超过告警阈值", deviceName: "1号冷却泵", detail: "pump1.outlet_temp", valueText: "83.0 °C", thresholdText: "阈值 ≥ 80.0 °C" },
   ];
-  return <main className="app" data-screen-label="活动告警列表编辑器"><header className="topbar"><div className="topbar-left"><div className="brand"><span className="brand-mark"></span><span className="brand-name">工业智控平台</span></div><div className="page-name">监控画面编辑器</div><div className="save-state"><span className="save-dot"></span>{savedAt}</div>{publishedVersion > 0 && <div className="published-state">已发布 v{publishedVersion}</div>}</div><div className="topbar-actions"><button className="btn btn-ghost" type="button" onClick={() => setDrawerOpen(true)}><span className="button-content"><Icon name="info" />设计说明</span></button><button className="btn btn-secondary" type="button" onClick={onPreview}><span className="button-content"><Icon name="play" />预览运行态</span></button><button className="btn btn-publish" type="button" onClick={publish}><span className="button-content"><Icon name="save" />发布版本</span></button><button className="btn btn-primary" type="button" onClick={() => { setSavedAt("已保存"); showToast("草稿已保存"); }}><span className="button-content"><Icon name="save" />保存草稿</span></button></div></header><div className="workspace"><TrendPalette addTrend={addTrend} addDeviceState={addDeviceState} addAlarmList={addAlarmList} showToast={showToast} /><section className="canvas-shell" ref={canvasRef} aria-label="编辑画布"><div className="canvas-tools"><button className="tool-button active" type="button" aria-label="选择"><Icon name="cursor" /></button><button className="tool-button" type="button" aria-label="撤销"><Icon name="undo" /></button><button className="tool-button" type="button" aria-label="重做"><Icon name="redo" /></button></div>{pageSchema.components.map((node) => <div key={node.id} className={`component-frame ${node.type === "metric-card" ? "metric-frame" : node.type === "device-state" ? "device-frame" : node.type === "alarm-list" ? "alarm-frame" : "trend-frame"} ${selectedId === node.id ? "selected" : ""}`} style={{ left: node.position.x, top: node.position.y, width: node.size.width, height: node.size.height }} onClick={() => setSelectedId(node.id)} onPointerMove={movePointer} onPointerUp={endPointer} onPointerCancel={endPointer}>{node.type === "metric-card" ? <MetricCard schema={node} draggable onPointerDown={(event) => startPointer(event, node, "drag")} /> : node.type === "device-state" ? <DeviceStateCard node={node} onPointerDown={(event) => startPointer(event, node, "drag")} /> : node.type === "alarm-list" ? <AlarmList node={node} alarms={previewAlarms} example onPointerDown={(event) => startPointer(event, node, "drag")} /> : <TrendChart node={node} samples={previewSamples} now={Date.now()} onPointerDown={(event) => startPointer(event, node, "drag")} />}{selectedId === node.id && <><span className="resize-handle tl" onPointerDown={(event) => startPointer(event, node, "resize", "tl")}></span><span className="resize-handle tr" onPointerDown={(event) => startPointer(event, node, "resize", "tr")}></span><span className="resize-handle bl" onPointerDown={(event) => startPointer(event, node, "resize", "bl")}></span><span className="resize-handle tm" onPointerDown={(event) => startPointer(event, node, "resize", "t")}></span><span className="resize-handle bm" onPointerDown={(event) => startPointer(event, node, "resize", "b")}></span><span className="resize-handle br" onPointerDown={(event) => startPointer(event, node, "resize", "br")}></span></>}</div>)}</section><TrendInspector node={selected} updateProp={updateProp} copySchema={copySchema} schemaText={schemaText} /><footer className="statusbar"><div className="status-group"><span className="status-item">画布 <strong>1440 × 900</strong></span><span className="status-item">组件 <strong>{pageSchema.components.length}</strong></span></div><div className="status-group"><span className="status-item">选中 <strong>{selected.type}</strong></span><span className="status-item">位置 <strong>X {selected.position.x} · Y {selected.position.y}</strong></span><span className="status-item">缩放 <strong>100%</strong></span></div></footer></div><div className={`toast ${toast ? "visible" : ""}`} role="status"><span className="toast-check">✓</span>{toast}</div>{drawerOpen && <TrendDesignDrawer onClose={() => setDrawerOpen(false)} />}</main>;
+  return <main className="app" data-screen-label="活动告警列表编辑器"><header className="topbar"><div className="topbar-left"><div className="brand"><span className="brand-mark"></span><span className="brand-name">工业智控平台</span></div><div className="page-name">监控画面编辑器</div><div className="save-state"><span className="save-dot"></span>{savedAt}</div>{publishedVersion > 0 && <div className="published-state">已发布 v{publishedVersion}</div>}</div><div className="topbar-actions"><button className="btn btn-ghost" type="button" data-help-entry aria-controls="product-help" onClick={onHelp}><span className="button-content"><Icon name="info" />使用帮助</span></button><button className="btn btn-ghost" type="button" onClick={() => setDrawerOpen(true)}><span className="button-content"><Icon name="info" />设计说明</span></button><button className="btn btn-secondary" type="button" onClick={onPreview}><span className="button-content"><Icon name="play" />预览运行态</span></button><button className="btn btn-publish" type="button" onClick={publish}><span className="button-content"><Icon name="save" />发布版本</span></button><button className="btn btn-primary" type="button" onClick={() => { setSavedAt("已保存"); showToast("草稿已保存"); }}><span className="button-content"><Icon name="save" />保存草稿</span></button></div></header><div className="workspace"><TrendPalette addText={addText} addTrend={addTrend} addDeviceState={addDeviceState} addAlarmList={addAlarmList} showToast={showToast} /><section className="canvas-shell" ref={canvasRef} aria-label="编辑画布"><div className="canvas-tools"><button className="tool-button active" type="button" aria-label="选择"><Icon name="cursor" /></button><button className="tool-button" type="button" aria-label="撤销"><Icon name="undo" /></button><button className="tool-button" type="button" aria-label="重做"><Icon name="redo" /></button></div>{pageSchema.components.map((node) => <div key={node.id} className={`component-frame ${node.type === "metric-card" ? "metric-frame" : node.type === "device-state" ? "device-frame" : node.type === "alarm-list" ? "alarm-frame" : node.type === "text-block" ? "text-frame" : "trend-frame"} ${selectedId === node.id ? "selected" : ""}`} style={{ left: node.position.x, top: node.position.y, width: node.size.width, height: node.size.height }} onClick={() => setSelectedId(node.id)} onPointerMove={movePointer} onPointerUp={endPointer} onPointerCancel={endPointer}>{node.type === "text-block" ? <TextBlock node={node} onPointerDown={(event) => startPointer(event, node, "drag")} /> : node.type === "metric-card" ? <MetricCard schema={node} draggable onPointerDown={(event) => startPointer(event, node, "drag")} /> : node.type === "device-state" ? <DeviceStateCard node={node} onPointerDown={(event) => startPointer(event, node, "drag")} /> : node.type === "alarm-list" ? <AlarmList node={node} alarms={previewAlarms} example onPointerDown={(event) => startPointer(event, node, "drag")} /> : <TrendChart node={node} samples={previewSamples} now={Date.now()} onPointerDown={(event) => startPointer(event, node, "drag")} />}{selectedId === node.id && <><span className="resize-handle tl" onPointerDown={(event) => startPointer(event, node, "resize", "tl")}></span><span className="resize-handle tr" onPointerDown={(event) => startPointer(event, node, "resize", "tr")}></span><span className="resize-handle bl" onPointerDown={(event) => startPointer(event, node, "resize", "bl")}></span><span className="resize-handle tm" onPointerDown={(event) => startPointer(event, node, "resize", "t")}></span><span className="resize-handle bm" onPointerDown={(event) => startPointer(event, node, "resize", "b")}></span><span className="resize-handle br" onPointerDown={(event) => startPointer(event, node, "resize", "br")}></span></>}</div>)}</section><TrendInspector node={selected} updateProp={updateProp} copySchema={copySchema} schemaText={schemaText} /><footer className="statusbar"><div className="status-group"><span className="status-item">画布 <strong>1440 × 900</strong></span><span className="status-item">组件 <strong>{pageSchema.components.length}</strong></span></div><div className="status-group"><span className="status-item">选中 <strong>{selected.type}</strong></span><span className="status-item">位置 <strong>X {selected.position.x} · Y {selected.position.y}</strong></span><span className="status-item">缩放 <strong>100%</strong></span></div></footer></div><div className={`toast ${toast ? "visible" : ""}`} role="status"><span className="toast-check">✓</span>{toast}</div>{drawerOpen && <TrendDesignDrawer onClose={() => setDrawerOpen(false)} />}</main>;
 }
 
 function ContextMenuLayer({ pageSchema, setPageSchema }) {
@@ -969,8 +983,98 @@ function TrendEditorV5(props) {
   return <><TrendEditor {...props} /><ContextMenuLayer pageSchema={props.pageSchema} setPageSchema={props.setPageSchema} /></>;
 }
 
+// 本原型仅展示固定操作案例，不连接模型、不读取遥测、不更改页面配置。
+function helpExample(query, previousMessages) {
+  const publishSource = { title: "保存草稿与发布版本", excerpt: "点击顶部“发布版本”。该操作先保存当前草稿，再请求创建发布版本。等待出现“已发布 v…”提示，确认发布成功。点击“预览运行态”查看结果。" };
+  const runtimeSource = { title: "查看运行态", excerpt: "点击顶部“预览运行态”。查看顶部“发布版本 · v…”信息，确认正在查看已发布页面。已发布成功但旧运行态标签页没有变化时，刷新该标签页，重新加载最新版本。" };
+  const boundarySource = { title: "能力边界", excerpt: "用户请求“帮我直接发布”“替我修改阈值”时，助手说明只能提供指导，再给出人工操作步骤，不能声称已经执行。指南没有说明的功能、部署方式或权限，应明确表示没有足够资料。" };
+  if (/MQTT|接入协议/i.test(query)) return { text: "当前操作指南未覆盖 MQTT 接入的配置入口和参数，我没有足够资料提供步骤。\n这不表示产品一定不支持；请补充相关接入文档。", sources: [boundarySource] };
+  if (/直接发布|替我|帮我.*发布/.test(query)) return { text: "我只能提供操作指导，不能替你发布页面。\n你可以手动点击顶部“发布版本”，等待“已发布 v…”提示后，再打开或刷新运行态。", sources: [publishSource, boundarySource] };
+  if (/数据键|温度|绑定/.test(query)) return { text: "数据键标识组件读取的数据项。配置出口温度：\n\n1. 选中指标卡或折线图。\n2. 在右侧“属性配置”的“数据键”填写 pump1.outlet_temp。\n3. 保存草稿并发布，再打开运行态。\n\n数据提供方必须实际发送这个键；修改标题不会改变数据绑定。", sources: [{ title: "绑定数据", excerpt: "将出口温度绑定到页面：点击画布上的指标卡或折线图。在右侧“属性配置”的“数据键”中填入 pump1.outlet_temp，与项目模拟器提供的出口温度对应。填写不存在的数据键不会创建新的设备数据。" }] };
+  if (/文本|标题/.test(query)) return { text: "添加“冷却系统运行概览”标题：\n\n1. 点击左侧“文本”。\n2. 在右侧填写文本内容。\n3. 设置字号（12–64）、文字颜色和对齐方式。\n4. 调整位置与尺寸，然后保存并按需发布。\n\n文本块可添加多个，仅展示纯文本，不解析 HTML 或 Markdown。", sources: [{ title: "添加组件", excerpt: "点击左侧“文本”。在右侧填写“文本内容”，例如“冷却系统运行概览”。设置字号、文字颜色和对齐方式。字号范围为 12–64，对齐支持左对齐、居中和右对齐。文本块可以添加多个。" }] };
+  if (/查看|结果|运行态/.test(query) && (!/旧|没变化/.test(query))) return { text: `${previousMessages.some((message) => /发布/.test(message.text)) ? "发布成功后，" : "先确认发布成功，再"}点击顶部“预览运行态”查看结果。\n\n核对顶部“发布版本 · v…”信息。若运行态已在其他标签页打开，刷新该标签页以加载最新版本。\n\n“预览运行态”不会自动发布草稿。`, sources: [runtimeSource, publishSource] };
+  if (/发布|保存|旧内容/.test(query)) return { text: "让运行态显示最新修改：\n\n1. 检查当前页面内容和数据键。\n2. 点击顶部“发布版本”，系统会先保存草稿。\n3. 等待“已发布 v…”提示，确认发布成功。\n4. 点击“预览运行态”；已有运行态标签页需要刷新。\n\n只保存草稿不会更新运行态。保存或发布失败时，不能认定本次发布成功。", sources: [publishSource] };
+  return { text: "当前原型只演示发布、查看运行态、数据绑定和文本标题等固定案例。这个问题暂无可演示的操作依据，不会编造入口或实时数据。\n正式版本将由 Agent 检索产品指南后回答。", sources: [boundarySource] };
+}
+
+function ProductHelpPanel({ open, onClose }) {
+  const [messages, setMessages] = useState([]);
+  const [draft, setDraft] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [simulateFailure, setSimulateFailure] = useState(false);
+  const [expired, setExpired] = useState(false);
+  const timer = useRef(null), input = useRef(null), scroll = useRef(null), lastQuery = useRef("");
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => {
+    if (!open) return undefined;
+    input.current?.focus();
+    const handler = (event) => { if (event.key === "Escape") { onClose(); document.querySelector('[data-help-entry]')?.focus(); } };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open]);
+  useEffect(() => { if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; }, [messages, pending, error, expired, open]);
+  const ask = (question, retry = false) => {
+    const query = question.trim();
+    if (!query || pending || expired) return;
+    const fail = !retry && simulateFailure;
+    setSimulateFailure(false);
+    setError("");
+    setPending(true);
+    lastQuery.current = query;
+    if (!retry) {
+      setMessages((current) => [...current, { role: "user", text: query }]);
+      setDraft("");
+    }
+    timer.current = window.setTimeout(() => {
+      setPending(false);
+      if (fail) setError("暂时无法连接问答服务，本次未生成回答。请重试，不需要重新输入问题。");
+      else setMessages((current) => [...current, { role: "assistant", ...helpExample(query, current) }]);
+    }, 900);
+  };
+  const close = () => { onClose(); document.querySelector('[data-help-entry]')?.focus(); };
+  const expire = () => {
+    setExpired(true);
+    setError("");
+    setSimulateFailure(false);
+  };
+  const startNewSession = () => {
+    setMessages([]);
+    setDraft("");
+    setError("");
+    setExpired(false);
+    lastQuery.current = "";
+    window.requestAnimationFrame(() => input.current?.focus());
+  };
+  if (!open) return null;
+  return (
+    <aside id="product-help" className="help-panel" aria-labelledby="help-title" data-help-panel data-screen-label="产品使用帮助">
+      <header className="help-header">
+        <div className="help-heading"><Icon name="info" size={19} /><div><h2 id="help-title">使用帮助</h2><p>操作指南问答 · 只读指导</p></div></div>
+        <button className="help-close" type="button" aria-label="关闭使用帮助" onClick={close}><Icon name="close" size={18} /></button>
+      </header>
+      <div className="help-scope"><Icon name="lock" size={13} /><span>不修改页面、不代为发布、不查询实时设备数据</span></div>
+      <div className="help-conversation" ref={scroll} role="log" aria-label="帮助对话" aria-live="polite" aria-busy={pending}>
+        {messages.length === 0 && !expired && <section className="help-welcome"><div className="help-welcome-icon"><Icon name="info" size={26} /></div><h3>配置页面时遇到问题？</h3><p>问我如何添加组件、绑定数据或发布页面。回答会附上可核对的指南章节。</p><div className="help-suggestions"><button type="button" onClick={() => ask("怎样发布当前页面？")}>怎样发布当前页面？<span>↗</span></button><button type="button" onClick={() => ask("出口温度的数据键怎么设置？")}>出口温度的数据键怎么设置？<span>↗</span></button><button type="button" onClick={() => ask("怎样添加文本标题？")}>怎样添加文本标题？<span>↗</span></button></div></section>}
+        {messages.map((message, index) => <article className={`help-message help-message--${message.role}`} key={index}><span className="help-speaker">{message.role === "user" ? "你" : "使用帮助"}</span><p>{message.text}</p>{message.sources && <div className="help-sources"><span className="help-source-label">操作指南依据</span>{message.sources.map((source) => <details key={source.title}><summary><Icon name="text" size={13} /><span>{source.title}</span><span className="help-source-expand">展开原文</span></summary><div className="help-source-content"><small>docs/product-guide.md · {source.title}</small><p>{source.excerpt}</p></div></details>)}</div>}</article>)}
+        {pending && <div className="help-loading" role="status"><span className="diagnosis-spinner"></span>正在查阅操作指南…</div>}
+        {error && <div className="help-error" role="alert"><strong>本次问答失败</strong><p>{error}</p><button type="button" onClick={() => ask(lastQuery.current, true)}>重试这条问题</button></div>}
+        {expired && <div className="help-error help-expired" role="alert"><strong>会话已过期</strong><p>闲置超过 15 分钟或服务重启，之前的上下文已失效。旧对话仅供查看，不能继续追问。</p><p>开始新会话后会清空当前对话，请重新说明问题背景。</p><button type="button" onClick={startNewSession}>开始新会话</button></div>}
+      </div>
+      <form className="help-composer" onSubmit={(event) => { event.preventDefault(); ask(draft); }}>
+        <label className="help-input-label" htmlFor="help-question">你的问题</label>
+        <textarea id="help-question" ref={input} value={draft} disabled={expired} maxLength={1000} placeholder={expired ? "请先开始新会话，再重新说明问题背景" : "例如：保存草稿后，运行态为什么还是旧内容？"} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(draft); } }} />
+        <div className="help-composer-actions"><span>Enter 发送 · Shift+Enter 换行</span><button type="submit" disabled={expired || pending || !draft.trim()}>{pending ? "查阅中" : "发送"}</button></div>
+        <p className="help-session-note">关闭后保留 · 闲置 15 分钟过期 · 刷新后清空</p>
+      </form>
+      <div className="help-demo"><span>原型 · 未连接模型</span><div className="help-demo-actions"><button type="button" disabled={pending || expired} aria-pressed={simulateFailure} onClick={() => setSimulateFailure(!simulateFailure)}>{simulateFailure ? "下次将失败" : "模拟失败"}</button><button type="button" disabled={pending || expired} onClick={expire}>模拟过期</button></div></div>
+    </aside>
+  );
+}
+
 function TrendPrototypeApp() {
   const [mode, setMode] = useState("editor"), [published, setPublished] = useState(null);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [pageSchema, setPageSchema] = useState({ version: "1.0.0", id: "demo", name: "冷却系统监控", canvas: { width: 1440, height: 900, background: "#0e1d2b" }, components: [
     { id: "metric-pump-01", type: "metric-card", position: { x: 275, y: 130 }, size: { width: 300, height: 214 }, props: { deviceName: "1号冷却泵", title: "出口温度", dataKey: "pump1.outlet_temp", unit: "°C", precision: 1, alarmThreshold: 80 } },
     { id: "device-state-pump-01", type: "device-state", position: { x: 610, y: 130 }, size: { width: 300, height: 180 }, props: { deviceName: "1号冷却泵", title: "设备运行状态", dataKey: "pump1.operating_state" } },
@@ -979,7 +1083,7 @@ function TrendPrototypeApp() {
   ] });
   useEffect(() => { const handler = (event) => { if (event.key === "Escape" && mode === "runtime" && !document.querySelector("[data-diagnosis-drawer], [data-history-drawer]")) setMode("editor"); }; window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler); }, [mode]);
   const publish = () => { const version = (published?.version ?? 0) + 1; setPublished({ version, schema: JSON.parse(JSON.stringify(pageSchema)) }); return version; };
-  return mode === "runtime" ? <TrendRuntime published={published} onBack={() => setMode("editor")} /> : <TrendEditorV5 pageSchema={pageSchema} setPageSchema={setPageSchema} onPreview={() => setMode("runtime")} onPublish={publish} publishedVersion={published?.version ?? 0} />;
+  return <>{mode === "runtime" ? <TrendRuntime published={published} onBack={() => setMode("editor")} /> : <TrendEditorV5 pageSchema={pageSchema} setPageSchema={setPageSchema} onPreview={() => setMode("runtime")} onPublish={publish} publishedVersion={published?.version ?? 0} onHelp={() => setHelpOpen(!helpOpen)} />}<ProductHelpPanel open={helpOpen && mode === "editor"} onClose={() => setHelpOpen(false)} /></>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<TrendPrototypeApp />);

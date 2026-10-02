@@ -357,3 +357,84 @@ test("运行态可查看由真实观测证明的历史告警", async ({ page, re
   await expect(drawer).toContainText("触发：#");
   await page.screenshot({ path: "/tmp/industrial-history-real.png" });
 });
+
+test("纯文本组件可编辑、调整几何信息并随发布版本进入运行态", async ({ page }) => {
+  const pageId = `text-browser-${Date.now()}`;
+  await page.goto(`/editor/${pageId}`);
+  await expect(page.locator('main[aria-busy="false"]')).toBeVisible();
+  await page.getByRole("button", { name: "文本" }).click();
+
+  const block = page.getByTestId("text-block");
+  await expect(block).toHaveCount(1);
+  await page.getByRole("textbox", { name: "文本内容" }).fill("冷却泵监控\n请核对现场设备状态");
+  await page.getByRole("spinbutton", { name: "字号" }).fill("28");
+  await page.getByRole("spinbutton", { name: "字号" }).press("Tab");
+  await page.getByLabel("文字颜色").fill("#8bd4e5");
+  await page.getByRole("combobox", { name: "对齐方式" }).selectOption("center");
+  await expect(block).toContainText("请核对现场设备状态");
+  await expect(block).toHaveCSS("font-size", "28px");
+  await expect(block).toHaveCSS("text-align", "center");
+
+  const before = JSON.parse(await page.getByTestId("schema-preview").innerText());
+  const original = before.components.find((node: { type: string }) => node.type === "text-block");
+  await page.getByRole("region", { name: "编辑画布" }).evaluate((canvas) => { canvas.scrollLeft = 180; });
+  const box = await block.boundingBox();
+  if (!box) throw new Error("文本组件没有可见边界");
+  await page.mouse.move(box.x + 40, box.y + 25);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 70, box.y + 25);
+  await page.mouse.up();
+  await expect.poll(async () => {
+    const schema = JSON.parse(await page.getByTestId("schema-preview").innerText());
+    return schema.components.find((node: { type: string }) => node.type === "text-block").position.x;
+  }).toBeGreaterThan(original.position.x);
+
+  const handle = page.locator(".moveable-control.moveable-se");
+  await expect(handle).toBeVisible();
+  await expect.poll(async () => {
+    const targetBox = await page.locator(`[data-component-id="${original.id}"]`).boundingBox();
+    const currentHandle = await handle.boundingBox();
+    if (!targetBox || !currentHandle) return Infinity;
+    return Math.max(
+      Math.abs(currentHandle.x + currentHandle.width / 2 - targetBox.x - targetBox.width),
+      Math.abs(currentHandle.y + currentHandle.height / 2 - targetBox.y - targetBox.height),
+    );
+  }).toBeLessThan(5);
+  const handleBox = await handle.boundingBox();
+  if (!handleBox) throw new Error("文本组件没有缩放手柄");
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + handleBox.width / 2 + 30, handleBox.y + handleBox.height / 2 + 20, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => {
+    const schema = JSON.parse(await page.getByTestId("schema-preview").innerText());
+    return schema.components.find((node: { type: string }) => node.type === "text-block").size.width;
+  }).toBeGreaterThan(original.size.width);
+
+  const savedPromise = page.waitForResponse(response =>
+    response.url().endsWith(`/api/pages/${pageId}/draft`) && response.request().method() === "PUT"
+  );
+  await page.getByRole("button", { name: "保存草稿" }).click();
+  const saved = await savedPromise;
+  expect(saved.status(), await saved.text()).toBe(200);
+  await page.reload();
+  await expect(page.getByTestId("text-block")).toContainText("请核对现场设备状态");
+  await page.getByRole("button", { name: "发布版本" }).click();
+  await page.getByRole("button", { name: "预览运行态" }).click();
+  await expect(page.getByTestId("text-block")).toContainText("冷却泵监控");
+  await expect(page.getByTestId("text-block")).toHaveCSS("color", "rgb(139, 212, 229)");
+  await expect(page.getByText("属性配置")).toHaveCount(0);
+  await page.screenshot({ path: "/tmp/industrial-text-runtime.png" });
+});
+
+test("同一画布可以添加多个独立文本组件", async ({ page }) => {
+  await page.goto(`/editor/text-multiple-${Date.now()}`);
+  await expect(page.locator('main[aria-busy="false"]')).toBeVisible();
+  await page.getByRole("button", { name: "文本" }).click();
+  await page.getByRole("button", { name: "文本" }).click();
+
+  await expect(page.getByTestId("text-block")).toHaveCount(2);
+  const schema = JSON.parse(await page.getByTestId("schema-preview").innerText());
+  const ids = schema.components.filter((node: { type: string }) => node.type === "text-block").map((node: { id: string }) => node.id);
+  expect(new Set(ids).size).toBe(2);
+});

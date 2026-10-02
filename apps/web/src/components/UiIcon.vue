@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineProps<{
-  name: "play" | "save" | "chart" | "text" | "line" | "device" | "bell" | "lock" | "copy" | "import" | "cursor" | "undo" | "redo" | "trash" | "back";
+  name: "play" | "save" | "chart" | "text" | "line" | "device" | "bell" | "lock" | "copy" | "import" | "cursor" | "undo" | "redo" | "trash" | "back" | "info" | "close";
   size?: number;
 }>();
 </script>
@@ -18,7 +18,13 @@ defineProps<{
     stroke-linejoin="round"
     aria-hidden="true"
   >
-    <template v-if="name === 'play'">
+    <template v-if="name === 'info'">
+      <circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" />
+    </template>
+    <template v-else-if="name === 'close'">
+      <path d="m6 6 12 12m0-12L6 18" />
+    </template>
+    <template v-else-if="name === 'play'">
       <rect x="3" y="4" width="18" height="13" rx="1" />
       <path d="m10 8 5 2.5-5 2.5Z" />
       <path d="M8 21h8" />

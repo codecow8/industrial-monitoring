@@ -10,6 +10,7 @@ import {
   type DeviceStateNode,
   type MetricCardNode,
   type PageSchema,
+  type TextBlockNode,
   type TrendChartNode,
 } from "@industrial/schema";
 import { loadPageSchema, savePageSchema } from "@/data/pageRepository";
@@ -61,6 +62,10 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     unit?: string;
     precision?: number;
     alarmThreshold?: number;
+    content?: string;
+    fontSize?: number;
+    color?: string;
+    align?: "left" | "center" | "right";
   };
 
   function updateSelectedProps(patch: Partial<EditableProps>): void {
@@ -81,6 +86,15 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
         ...deviceStatePatch
       } = patch;
       node.props = { ...node.props, ...deviceStatePatch };
+    } else if (node.type === "text-block") {
+      const { content, fontSize, color, align } = patch;
+      node.props = {
+        ...node.props,
+        ...(content !== undefined && { content }),
+        ...(fontSize !== undefined && { fontSize }),
+        ...(color !== undefined && { color }),
+        ...(align !== undefined && { align }),
+      };
     } else if (patch.title !== undefined) {
       node.props = { title: patch.title };
     }
@@ -154,6 +168,23 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     selectedId.value = alarmList.id;
   }
 
+  function addTextBlock(): void {
+    const next = clonePageSchema(schema.value);
+    let number = 1;
+    while (next.components.some((node) => node.id === `text-block-${number}`)) number += 1;
+    const count = next.components.filter((node) => node.type === "text-block").length;
+    const textBlock: TextBlockNode = {
+      id: `text-block-${number}`,
+      type: "text-block",
+      position: { x: 410 + count * 18, y: 38 + count * 18 },
+      size: { width: 500, height: 88 },
+      props: { content: "冷却系统运行概览", fontSize: 24, color: "#dcebf3", align: "left" },
+    };
+    next.components.push(textBlock);
+    record(next);
+    selectedId.value = textBlock.id;
+  }
+
   function removeComponent(componentId: string): void {
     const next = clonePageSchema(schema.value);
     const index = next.components.findIndex((node) => node.id === componentId);
@@ -215,6 +246,7 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
     addTrendChart,
     addDeviceState,
     addAlarmList,
+    addTextBlock,
     removeComponent,
     updateSelectedGeometry,
     importFromText,

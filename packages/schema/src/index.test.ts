@@ -145,4 +145,31 @@ describe("PageSchema", () => {
 
     expect(validatePageSchema(candidate).valid).toBe(false);
   });
+
+  it("accepts a multiline text block without changing the page schema version", () => {
+    const candidate = createSeedPageSchema() as unknown as { version: string; components: unknown[] };
+    candidate.components.push({
+      id: "text-heading-01", type: "text-block",
+      position: { x: 410, y: 38 }, size: { width: 500, height: 88 },
+      props: { content: "冷却泵监控\n请核对现场状态", fontSize: 28, color: "#8bd4e5", align: "center" },
+    });
+
+    expect(candidate.version).toBe("1.0.0");
+    expect(validatePageSchema(candidate).valid).toBe(true);
+  });
+
+  it("rejects text blocks outside the approved size and style contract", () => {
+    const candidate = createSeedPageSchema() as unknown as { components: Array<Record<string, unknown>> };
+    candidate.components.push({
+      id: "text-heading-01", type: "text-block",
+      position: { x: 410, y: 38 }, size: { width: 500, height: 88 },
+      props: { content: "冷却泵监控", fontSize: 28, color: "#8bd4e5", align: "center" },
+    });
+    const text = candidate.components[1];
+    (text.props as Record<string, unknown>).fontSize = 80;
+    expect(validatePageSchema(candidate).valid).toBe(false);
+    (text.props as Record<string, unknown>).fontSize = 28;
+    (text.props as Record<string, unknown>).color = "red";
+    expect(validatePageSchema(candidate).valid).toBe(false);
+  });
 });

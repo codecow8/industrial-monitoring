@@ -12,6 +12,7 @@ import { webComponentRegistry } from "@industrial/components-web";
 import { useEditorDocumentStore } from "@/stores/editorDocument";
 import UiIcon from "@/components/UiIcon.vue";
 import { publishPage } from "@/data/pageRepository";
+import { productHelp } from "@/data/productHelp";
 
 type DragEvent = {
   target: HTMLElement | SVGElement;
@@ -46,7 +47,7 @@ const schemaText = computed(() => JSON.stringify(store.schema, null, 2));
 
 const palette = [
   { name: "指标卡", icon: "chart" as const, active: true, action: undefined },
-  { name: "文本", icon: "text" as const, active: false },
+  { name: "文本", icon: "text" as const, active: true, action: () => { store.addTextBlock(); syncTarget(); } },
   { name: "折线图", icon: "line" as const, active: true, action: () => { store.addTrendChart(); syncTarget(); } },
   { name: "设备状态", icon: "device" as const, active: true, action: () => { store.addDeviceState(); syncTarget(); } },
   { name: "告警列表", icon: "bell" as const, active: true, action: () => { store.addAlarmList(); syncTarget(); } },
@@ -87,6 +88,22 @@ function updateNumberProp(
 ): void {
   if (value === undefined || Number.isNaN(value)) return;
   store.updateSelectedProps({ [key]: value });
+}
+
+function updateFontSize(value: number | undefined): void {
+  if (value === undefined || Number.isNaN(value)) return;
+  store.updateSelectedProps({ fontSize: Math.round(value) });
+}
+
+function updateColor(event: Event): void {
+  store.updateSelectedProps({ color: (event.target as HTMLInputElement).value });
+}
+
+function updateAlign(event: Event): void {
+  const value = (event.target as HTMLSelectElement).value;
+  if (value === "left" || value === "center" || value === "right") {
+    store.updateSelectedProps({ align: value });
+  }
 }
 
 async function saveDraft(showMessage = true): Promise<boolean> {
@@ -249,6 +266,9 @@ function onResizeEnd(): void {
         <span class="save-state"><i></i>{{ store.dirty ? "有未保存修改" : "已自动保存" }}</span>
       </div>
       <div class="topbar__actions">
+        <button class="app-button app-button--secondary" type="button" data-help-entry aria-controls="product-help" :aria-expanded="productHelp.open" @click="productHelp.open = !productHelp.open">
+          <UiIcon name="info" />使用帮助
+        </button>
         <button class="app-button app-button--secondary" type="button" :disabled="loading" @click="preview">
           <UiIcon name="play" />预览运行态
         </button>
@@ -286,7 +306,7 @@ function onResizeEnd(): void {
         <div class="palette-note"><span></span>更多组件开发中<span></span></div>
       </aside>
 
-      <section ref="canvasViewport" class="canvas-viewport" aria-label="编辑画布" @contextmenu="openContextMenu">
+      <section ref="canvasViewport" class="canvas-viewport" aria-label="编辑画布" @contextmenu="openContextMenu" @scroll="moveableRef?.updateRect()">
         <div class="canvas-tools">
           <button class="canvas-tool canvas-tool--active" type="button" aria-label="选择"><UiIcon name="cursor" /></button>
           <button class="canvas-tool" type="button" aria-label="撤销" :disabled="!store.canUndo" @click="store.undo"><UiIcon name="undo" /></button>
@@ -317,15 +337,31 @@ function onResizeEnd(): void {
         <section v-if="store.selectedNode" class="inspector-section">
           <div class="section-heading"><strong>基础属性</strong><code>{{ store.selectedNode.type }}</code></div>
           <div class="field-list">
+            <label v-if="store.selectedNode.type === 'text-block'" class="field-row field-row--multiline">
+              <span>文本内容</span>
+              <el-input type="textarea" :rows="4" aria-label="文本内容" :model-value="store.selectedNode.props.content" @update:model-value="store.updateSelectedProps({ content: $event })" />
+            </label>
+            <label v-if="store.selectedNode.type === 'text-block'" class="field-row">
+              <span>字号</span>
+              <el-input-number aria-label="字号" :model-value="store.selectedNode.props.fontSize" :min="12" :max="64" :precision="0" controls-position="right" @update:model-value="updateFontSize($event)" />
+            </label>
+            <label v-if="store.selectedNode.type === 'text-block'" class="field-row">
+              <span>文字颜色</span>
+              <span class="text-color-control"><input class="text-color-input" type="color" aria-label="文字颜色" :value="store.selectedNode.props.color" @input="updateColor" /><code>{{ store.selectedNode.props.color }}</code></span>
+            </label>
+            <label v-if="store.selectedNode.type === 'text-block'" class="field-row">
+              <span>对齐方式</span>
+              <select class="text-align-select" aria-label="对齐方式" :value="store.selectedNode.props.align" @change="updateAlign"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select>
+            </label>
             <label v-if="store.selectedNode.type === 'metric-card' || store.selectedNode.type === 'device-state'" class="field-row">
               <span>设备名称</span>
               <el-input aria-label="设备名称" :model-value="store.selectedNode.props.deviceName" @update:model-value="updateTextProp('deviceName', $event)" />
             </label>
-            <label class="field-row">
+            <label v-if="store.selectedNode.type !== 'text-block'" class="field-row">
               <span>{{ store.selectedNode.type === "metric-card" ? "指标标题" : store.selectedNode.type === "trend-chart" ? "图表标题" : "组件标题" }}</span>
               <el-input :aria-label="store.selectedNode.type === 'metric-card' ? '指标标题' : store.selectedNode.type === 'trend-chart' ? '图表标题' : '组件标题'" :model-value="store.selectedNode.props.title" @update:model-value="updateTextProp('title', $event)" />
             </label>
-            <label v-if="store.selectedNode.type !== 'alarm-list'" class="field-row">
+            <label v-if="store.selectedNode.type !== 'alarm-list' && store.selectedNode.type !== 'text-block'" class="field-row">
               <span>数据键</span>
               <el-input aria-label="数据键" :model-value="store.selectedNode.props.dataKey" @update:model-value="updateTextProp('dataKey', $event)" />
             </label>

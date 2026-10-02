@@ -11,6 +11,7 @@
     "dev:prototype": "python3 -m http.server 4311 --bind 127.0.0.1 --directory designs",
     "dev:electron": "pnpm --filter @industrial/electron dev",
     "dev:api": "bash scripts/dev-api.sh",
+    "dev:agent": "pnpm --dir services/agent dev:http",
     "dev:simulator": "python3 services/simulator/simulator.py",
     "db:migrate": "cd services/api && uv run --python 3.12 alembic upgrade head",
     "schema:export": "pnpm --filter @industrial/schema export:json-schema",
