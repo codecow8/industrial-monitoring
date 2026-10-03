@@ -15,7 +15,7 @@ if [[ -d "$PWD/.docker" ]]; then
 fi
 compose=(docker compose --env-file "$deploy_root/.env" -f compose.yml)
 "${compose[@]}" config --quiet
-"${compose[@]}" pull
+"${compose[@]}" pull api simulator web
 
 previous_dir=""
 if [[ -L "$deploy_root/current" ]]; then
@@ -37,7 +37,7 @@ restore_previous() {
 }
 trap restore_previous ERR
 
-"${compose[@]}" up -d postgres --wait --wait-timeout 120
+"${compose[@]}" up -d postgres --pull never --wait --wait-timeout 120
 mkdir -p "$deploy_root/backups"
 "${compose[@]}" exec -T postgres pg_dump -U industrial -d industrial_monitoring -Fc \
   > "$deploy_root/backups/$(date -u +%Y%m%dT%H%M%SZ)-$release_sha.dump"

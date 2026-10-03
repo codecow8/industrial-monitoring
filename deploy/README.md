@@ -27,6 +27,7 @@ Repository variables:
 
 Push main → frontend/API/Agent tests → three linux/amd64 application images tagged by SHA and a PostgreSQL mirror at 18.6-alpine → SSH deployment → database backup → stop API/simulator → migration → container health/database checks → HTTPS smoke check.
 The upstream PostgreSQL image is mirrored unchanged to GHCR because this server cannot reliably reach Docker Hub.
+If the fixed database image is not cached on the server, the runner downloads it and transfers a compressed Docker archive over SSH. Database startup never pulls from a registry on the host; direct database downloads were observed to stall. Application images continue to use GHCR normally.
 Pull requests only verify. Live AI evaluations do not run in CI.
 
 Deployments are serialized. API uses one worker because telemetry/WebSocket state is in process. Migration/replacement causes a short interruption; this is not zero-downtime deployment.

@@ -105,6 +105,13 @@ jobs:
           release_dir="/opt/industrial-monitoring/$RELEASE_SHA"
           ssh "$target" "mkdir -p '$release_dir'"
           scp deploy/compose.yml deploy/deploy.sh "$target:$release_dir/"
+          db_image="ghcr.io/${{ github.repository }}-postgres:18.6-alpine"
+          if ! ssh "$target" "docker image inspect '$db_image' >/dev/null 2>&1"; then
+            printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+            docker pull "$db_image"
+            docker save "$db_image" | gzip -1 | ssh "$target" 'gunzip | docker load'
+            docker logout ghcr.io
+          fi
           printf '%s' "$REGISTRY_TOKEN" | ssh "$target" "docker --config '$release_dir/.docker' login ghcr.io -u '$REGISTRY_USER' --password-stdin"
           ssh "$target" "bash '$release_dir/deploy.sh' '$RELEASE_SHA'"
       - name: Verify public HTTPS and API
