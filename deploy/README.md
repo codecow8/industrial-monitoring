@@ -9,7 +9,7 @@ Existing EverDojo containers and host Nginx remain in place. Industrial uses loo
 2. Create `/opt/industrial-monitoring`, owned by the SSH deployment user. The user needs Docker access (equivalent to administrative access).
 3. Copy `.env.example` to `/opt/industrial-monitoring/.env`, mode 600. Set a random hex database password and bcrypt demo password hash. Leave AI keys empty until you want paid diagnosis requests. Later password changes also require updating the existing database role password.
 4. Install `nginx.conf` as a separate host site, run `nginx -t`, then reload. Once DNS resolves, run `sudo certbot --nginx -d industrial.everdojo.cn` and verify renewal with `sudo certbot renew --dry-run`.
-5. Configure GitHub secrets/variables below. Actions passes a temporary read-only GHCR token to an isolated Docker config directory for each release and logs out afterward. Packages can remain private even though the code repository is public. Manual deployments require GHCR read access or images already downloaded locally.
+5. Configure GitHub secrets/variables below. Actions passes a temporary read-only GHCR token to an isolated Docker config directory for each release and logs out afterward. Packages can remain private even though the code repository is public. Manual deployments require GHCR read access and the fixed database image already cached on the server.
 
 Repository secrets:
 
@@ -35,10 +35,15 @@ Startup/database failures restore previous application images. Database migratio
 
 Backups are retained at `/opt/industrial-monitoring/backups`; copy them off-server periodically and monitor storage. Never run `docker compose down -v` in production.
 
-Application rollback:
+Application rollback (uses cached images and retains the migrated database; confirm schema compatibility first):
 
 ```bash
-bash /opt/industrial-monitoring/<previous-40-character-sha>/deploy.sh <previous-40-character-sha>
+previous_sha=<previous-40-character-sha>
+RELEASE_SHA="$previous_sha" docker compose \
+  --env-file /opt/industrial-monitoring/.env \
+  -f "/opt/industrial-monitoring/$previous_sha/compose.yml" \
+  up -d --pull never --remove-orphans --wait
+ln -sfn "/opt/industrial-monitoring/$previous_sha" /opt/industrial-monitoring/current
 ```
 
 Logs:
