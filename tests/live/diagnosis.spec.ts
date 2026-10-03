@@ -113,7 +113,7 @@ test("固定冷却泵温度告警能生成有真实来源的只读分析", async
   expect((await request.post(`${api}/telemetry`, { data: {
     timestamp: new Date().toISOString(), values: { [temperatureKey]: 79, [stateKey]: 1 },
   } })).status()).toBe(202);
-  await expect(page.getByTestId("alarm-list")).toContainText("当前无活动告警");
+  await expect(page.getByTestId("alarm-list")).toContainText("本次观测未触发已配置条件");
 });
 
 test("只有一条越界观测时明确显示证据不足", async ({ page, request }) => {

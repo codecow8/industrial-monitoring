@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted } from "vue";
 import type { AlarmHistoryPage, AlarmHistoryRecord, HistoryTransition } from "@/data/pageRepository";
 
 const props = defineProps<{
+  actionsBlocked?: boolean;
   history: AlarmHistoryPage | null;
   loading: boolean;
   loadingMore: boolean;
@@ -32,7 +33,7 @@ function transitionText(record: AlarmHistoryRecord, transition: HistoryTransitio
 function onScroll(event: Event): void {
   const element = event.currentTarget as HTMLElement;
   if (element.scrollTop + element.clientHeight >= element.scrollHeight - 160 &&
-      props.history?.nextOffset !== null && !props.loading && !props.loadingMore && !props.error) {
+      !props.actionsBlocked && props.history?.nextOffset !== null && !props.loading && !props.loadingMore && !props.error) {
     props.onLoadMore();
   }
 }
@@ -56,7 +57,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeyDown));
       <div class="history-scroll" @scroll="onScroll">
         <div class="history-scope"><strong>当前发布版本 · 最近 24 小时</strong><span>仅展示有前后观测可证实的触发与恢复；无基线时不推断开始时间。</span></div>
         <div v-if="loading" class="history-state" role="status"><span class="history-spinner"></span><h3>正在查询历史告警</h3><p>按观测时间整理触发与恢复记录…</p></div>
-        <div v-else-if="error" class="history-state" role="alert"><span class="history-error-mark">!</span><h3>暂时无法加载历史告警</h3><p>{{ error }}</p><button type="button" @click="onRetry">重新加载</button></div>
+        <div v-else-if="error" class="history-state" role="alert"><span class="history-error-mark">!</span><h3>暂时无法加载历史告警</h3><p>{{ error }}</p><button type="button" :disabled="actionsBlocked" @click="onRetry">重新加载</button></div>
         <div v-else-if="history?.records.length === 0" class="history-state" role="status"><span class="history-empty-mark">✓</span><h3>暂无历史告警</h3><p>最近 24 小时内没有可由相邻观测确认的告警转折。</p></div>
         <template v-else-if="history">
           <div class="history-list-heading"><strong>告警记录</strong><span>{{ history.total }} 条</span></div>
@@ -94,4 +95,5 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeyDown));
 .history-times { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 11px 0; border-top: 1px solid #e4ebef; border-bottom: 1px solid #e4ebef; }.history-times > div { display: grid; gap: 3px; }.history-times small { color: #8ba0ad; font-size: 9px; }.history-times b { color: #263f4f; font-size: 13px; }.history-times span { color: #647d8d; font-size: 10px; }
 .history-record details { color: #487993; font-size: 10px; }.history-record summary { width: fit-content; cursor: pointer; }.history-record details p { margin: 6px 0 0 15px; color: #6d8898; font-size: 10px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+button:disabled { opacity: .45; cursor: not-allowed; }
 </style>

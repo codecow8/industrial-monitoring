@@ -322,7 +322,7 @@ test("添加并发布告警列表后聚合活动告警并在恢复后清空", as
       values: { [temperatureKey]: 68.4, [stateKey]: 1 },
     },
   });
-  await expect(alarmList).toContainText("当前无活动告警");
+  await expect(alarmList).toContainText("本次观测未触发已配置条件");
   await expect(rows).toHaveCount(0);
 });
 
@@ -349,7 +349,7 @@ test("运行态可查看由真实观测证明的历史告警", async ({ page, re
     });
     expect(sent.status()).toBe(202);
   }
-  await expect(page.getByTestId("alarm-list")).toContainText("当前无活动告警");
+  await expect(page.getByTestId("alarm-list")).toContainText("本次观测未触发已配置条件");
   await historyButton.click();
   await expect(drawer).toContainText("出口温度越界");
   await expect(drawer).toContainText("已恢复");

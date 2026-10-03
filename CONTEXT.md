@@ -13,7 +13,7 @@ _Avoid_: Metric, field, tag
 _Avoid_: Increment, delta value, full snapshot
 
 **Telemetry Snapshot**:
-运行态首次订阅后收到的全部相关 Data Point 当前值，用作后续 Telemetry Update 的合并基线。
+运行态首次订阅或重连后收到的相关 Data Point 最新可核对观测，用作后续 Telemetry Update 的合并基线；收到快照不表示其中的观测刚刚更新。
 _Avoid_: Telemetry Update, history
 
 **Telemetry Observation**:
@@ -21,7 +21,7 @@ _Avoid_: Telemetry Update, history
 _Avoid_: Telemetry Update, Telemetry Snapshot, Trend Sample
 
 **Data Freshness**:
-Data Point 是否在预期时间内收到过新 Telemetry Update 的状态，独立于 WebSocket 连接是否仍然存在。
+Data Point 的最新可核对服务器观测是否仍在预期更新时效内的状态。年龄以服务器接收观测的时间为依据，独立于 WebSocket 连接是否仍然存在；重新连接或再次收到同一观测不会重置其年龄。
 _Avoid_: Online status, connection status
 
 **Trend Sample**:

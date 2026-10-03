@@ -9,7 +9,7 @@
           "path": "industrial-editor.html",
           "createdAt": "2026-09-18T00:54:59.299Z",
           "status": "approved",
-          "subtitle": "Agent当前活动告警与数据新鲜度查询原型",
+          "subtitle": "运行态服务器时间、资料不足与发布版本隔离原型",
           "viewport": {
             "width": 1440,
             "height": 960
@@ -19,5 +19,5 @@
     }
   },
   "createdAt": "2026-09-12T02:22:21.715Z",
-  "updatedAt": "2026-10-02T15:42:22.800726+00:00"
+  "updatedAt": "2026-10-03T04:14:00Z"
 }

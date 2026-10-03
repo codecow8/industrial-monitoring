@@ -19,7 +19,8 @@ export interface ActiveAlarmView {
 }
 
 export interface ActiveAlarmSummary {
-  status: "waiting" | "ready";
+  status: "waiting" | "ready" | "partial" | "stale" | "unconfigured";
+  coverage: { configured: number; observed: number; missing: number; stale: number };
   alarms: ActiveAlarmView[];
 }
 
@@ -27,14 +28,17 @@ export function resolveActiveAlarms(
   schema: PageSchema,
   dataPoints: Record<string, DataPointView>,
 ): ActiveAlarmSummary {
-  const sourceKeys = schema.components.flatMap((node) =>
+  const sourceKeys = [...new Set(schema.components.flatMap((node) =>
     node.type === "metric-card" || node.type === "trend-chart" || node.type === "device-state"
-      ? [node.props.dataKey]
-      : [],
-  );
-  const status = sourceKeys.length > 0 && sourceKeys.every((dataKey) =>
-    !dataPoints[dataKey] || dataPoints[dataKey].freshness === "waiting"
-  ) ? "waiting" : "ready";
+      ? [node.props.dataKey] : [],
+  ))];
+  const observed = sourceKeys.filter(key => dataPoints[key]?.value != null && dataPoints[key]?.freshness !== "waiting");
+  const coverage = { configured: sourceKeys.length, observed: observed.length,
+    missing: sourceKeys.length - observed.length,
+    stale: observed.filter(key => dataPoints[key]?.freshness === "stale").length };
+  // 没有触发条件、没有观测、资料不齐和过期，均不能宣称设备正常。
+  const status = !coverage.configured ? "unconfigured" : !coverage.observed ? "waiting"
+    : coverage.missing ? "partial" : coverage.stale ? "stale" : "ready";
   const alarms: ActiveAlarmView[] = [];
   const seen = new Set<string>();
   for (const node of schema.components) {
@@ -89,5 +93,5 @@ export function resolveActiveAlarms(
       ageMs: point.ageMs,
     });
   }
-  return { status, alarms };
+  return { status, coverage, alarms };
 }

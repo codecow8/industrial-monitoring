@@ -11,10 +11,11 @@ test("活动告警可打开分析、展示证据并在失败后重试", async ({
       { id: "alarms", type: "alarm-list", position: { x: 20, y: 250 }, size: { width: 420, height: 260 }, props: { title: "活动告警" } },
     ],
   };
-  await page.route("**/api/pages/demo/published", route => route.fulfill({ json: { pageId: "demo", version: 1, publishedAt: new Date().toISOString(), schema } }));
-  await page.routeWebSocket("**/ws/telemetry/pages/demo", socket => {
+  const observedAt = new Date().toISOString();
+  await page.route("**/api/pages/demo/published", route => route.fulfill({ json: { pageId: "demo", version: 1, publishedAt: observedAt, schema } }));
+  await page.routeWebSocket("**/ws/telemetry/pages/demo?version=1", socket => {
     socket.onMessage(() => {});
-    socket.send(JSON.stringify({ type: "telemetry.snapshot", timestamp: new Date().toISOString(), values: { "pump1.outlet_temp": 83 } }));
+    socket.send(JSON.stringify({ type: "telemetry.snapshot", pageId: "demo", pageVersion: 1, publishedAt: observedAt, serverTime: observedAt, observations: { "pump1.outlet_temp": { id: 103, value: 83, receivedAt: observedAt, sourceTimestamp: observedAt } }, values: { "pump1.outlet_temp": 83 } }));
   });
   let calls = 0;
   let releaseFirst!: () => void;

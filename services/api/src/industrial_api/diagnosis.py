@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .database import get_session
+from .freshness import STALE_AFTER_SECONDS
 from .models import TelemetryObservation
 from .repository import get_published
 
@@ -192,7 +193,7 @@ def diagnose_alarm(
         "sources": sources,
         "dataFreshness": {"windowStart": start.isoformat(), "windowEnd": now.isoformat(),
                           "latestReceivedAt": latest["receivedAt"],
-                          "stale": (now - datetime.fromisoformat(latest["receivedAt"])).total_seconds() > 30},
+                          "stale": (now - datetime.fromisoformat(latest["receivedAt"])).total_seconds() >= STALE_AFTER_SECONDS},
     }
     if len(selected) < 2:
         return {"status": "insufficient_evidence", **base,

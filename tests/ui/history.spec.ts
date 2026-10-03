@@ -21,9 +21,9 @@ test("历史告警加载失败可重试，滚动后继续加载", async ({ page 
     recovery: { from: observation(index * 4 + 3, 83), to: observation(index * 4 + 4, 79) },
   });
   await page.route("**/api/pages/demo/published", route => route.fulfill({ json: { pageId: "demo", version: 1, publishedAt: observedAt, schema } }));
-  await page.routeWebSocket("**/ws/telemetry/pages/demo", socket => {
+  await page.routeWebSocket("**/ws/telemetry/pages/demo?version=1", socket => {
     socket.onMessage(() => {});
-    socket.send(JSON.stringify({ type: "telemetry.snapshot", timestamp: observedAt, values: { "pump1.outlet_temp": 72 } }));
+    socket.send(JSON.stringify({ type: "telemetry.snapshot", pageId: "demo", pageVersion: 1, publishedAt: observedAt, serverTime: observedAt, observations: { "pump1.outlet_temp": { id: 103, value: 72, receivedAt: observedAt, sourceTimestamp: observedAt } }, values: { "pump1.outlet_temp": 72 } }));
   });
   let calls = 0;
   await page.route("**/api/pages/demo/alarm-history?**", async route => {

@@ -6,6 +6,7 @@ defineProps<{
   node: AlarmListNode;
   alarmSummary: ActiveAlarmSummary;
   example?: boolean;
+  actionsBlocked?: boolean;
   onAnalyze?: (alarm: ActiveAlarmView) => void;
   onHistory?: () => void;
 }>();
@@ -34,7 +35,7 @@ function freshnessText(alarm: ActiveAlarmView): string {
         <span v-if="example" class="alarm-example-badge">示例数据</span>
       </div>
       <div class="alarm-list-actions">
-        <button v-if="onHistory" class="alarm-history-button" type="button" @click="onHistory">◷ 历史</button>
+        <button v-if="onHistory" class="alarm-history-button" type="button" :disabled="actionsBlocked" @click="onHistory">◷ 历史</button>
         <span class="alarm-count" :class="{ active: alarmSummary.alarms.length > 0 }">
           {{ alarmSummary.alarms.length }} 条
         </span>
@@ -46,12 +47,22 @@ function freshnessText(alarm: ActiveAlarmView): string {
         <strong>等待设备数据</strong>
         <span>收到相关 Data Point 后开始判断</span>
       </div>
+      <div v-else-if="alarmSummary.status === 'unconfigured'" class="alarm-empty alarm-empty--waiting">
+        <span class="alarm-empty-icon" aria-hidden="true">!</span><strong>未配置告警条件</strong><span>没有可查询的条件，不代表设备正常</span>
+      </div>
+      <div v-else-if="alarmSummary.alarms.length === 0 && alarmSummary.status !== 'ready'" class="alarm-empty alarm-empty--unknown">
+        <span class="alarm-empty-icon" aria-hidden="true">!</span><strong>资料不足，无法确认当前告警</strong>
+        <span>{{ alarmSummary.coverage.missing ? `仍有 ${alarmSummary.coverage.missing} 项缺少观测` : `有 ${alarmSummary.coverage.stale} 项观测已过期` }}，不能宣称全部正常</span>
+      </div>
       <div v-else-if="alarmSummary.alarms.length === 0" class="alarm-empty alarm-empty--normal">
         <span class="alarm-empty-check" aria-hidden="true">✓</span>
-        <strong>当前无活动告警</strong>
-        <span>所有已配置条件均处于正常状态</span>
+        <strong>本次观测未触发已配置条件</strong>
+        <span>已收到相关新鲜观测，不代表设备健康</span>
       </div>
       <div v-else class="alarm-rows">
+        <div v-if="alarmSummary.coverage.missing || alarmSummary.coverage.stale" class="alarm-data-notice">
+          <template v-if="alarmSummary.coverage.missing">缺少 {{ alarmSummary.coverage.missing }} 项观测。</template><template v-if="alarmSummary.coverage.stale">{{ alarmSummary.coverage.stale }} 项观测已过期。</template>最后观测触发的告警保留，当前状态需核实。
+        </div>
         <article
           v-for="alarm in alarmSummary.alarms"
           :key="alarm.id"
@@ -69,7 +80,7 @@ function freshnessText(alarm: ActiveAlarmView): string {
             <span :class="alarm.freshness === 'stale' ? 'stale' : 'fresh'">
               {{ freshnessText(alarm) }}
             </span>
-            <button v-if="onAnalyze" type="button" class="alarm-analyze-button" @click="onAnalyze(alarm)">✧ 智能分析</button>
+            <button v-if="onAnalyze" type="button" class="alarm-analyze-button" :disabled="actionsBlocked" @click="onAnalyze(alarm)">✧ 智能分析</button>
           </div>
         </article>
       </div>
@@ -113,4 +124,7 @@ function freshnessText(alarm: ActiveAlarmView): string {
 .alarm-empty-icon, .alarm-empty-check { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; }
 .alarm-empty-icon { color: #7e95a5; background: rgba(105, 125, 139, 0.15); border: 1px solid rgba(145, 165, 179, 0.22); }
 .alarm-empty-check { color: #59ddb4; font-size: 15px !important; background: rgba(15, 133, 99, 0.18); border: 1px solid rgba(81, 227, 181, 0.24); }
+.alarm-data-notice { padding: 9px 10px; margin-bottom: 5px; color: #d8ae68; background: rgba(133, 91, 28, .15); border: 1px solid rgba(234, 167, 60, .2); border-radius: 2px; font-size: 10px; line-height: 1.7; }
+.alarm-empty--unknown strong { color: #eac17d; }
+button:disabled { opacity: .45; cursor: not-allowed; }
 </style>

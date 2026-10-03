@@ -34,6 +34,9 @@ export interface TelemetryScheduler {
 }
 
 interface TelemetrySessionOptions {
+  pageId: string;
+  pageVersion: number;
+  publishedAt: string;
   createSocket?: (url: string) => TelemetrySocket;
   scheduler?: TelemetryScheduler;
   staleAfterMs?: number;
@@ -41,11 +44,15 @@ interface TelemetrySessionOptions {
 
 interface StoredPoint {
   value: number;
-  updatedAt: number;
+  id: number;
+  receivedAt: number;
+  ageAtReceipt: number;
+  receiptTime: number;
 }
 
 const browserScheduler: TelemetryScheduler = {
-  now: () => Date.now(),
+  // 单调时钟只测经过时间，不受用户修改电脑时间影响。
+  now: () => performance.now(),
   requestFrame: (callback) => requestAnimationFrame(callback),
   cancelFrame: (handle) => cancelAnimationFrame(handle as number),
   setTimer: (callback, delay) => window.setTimeout(callback, delay),
@@ -54,13 +61,14 @@ const browserScheduler: TelemetryScheduler = {
 
 export class TelemetrySession {
   connection: ConnectionState = "disconnected";
+  latestVersion: number | null = null;
 
   private readonly scheduler: TelemetryScheduler;
   private readonly createSocket: (url: string) => TelemetrySocket;
   private readonly staleAfterMs: number;
   private readonly points = new Map<string, StoredPoint>();
   private readonly samples = new Map<string, TrendSample[]>();
-  private readonly pendingValues = new Map<string, number>();
+  private readonly pendingValues = new Map<string, StoredPoint>();
   private readonly listeners = new Set<() => void>();
   private socket: TelemetrySocket | null = null;
   private frame: unknown = null;
@@ -71,7 +79,7 @@ export class TelemetrySession {
 
   constructor(
     private readonly url: string,
-    options: TelemetrySessionOptions = {},
+    private readonly options: TelemetrySessionOptions,
   ) {
     this.scheduler = options.scheduler ?? browserScheduler;
     this.createSocket =
@@ -81,7 +89,7 @@ export class TelemetrySession {
   }
 
   start(): void {
-    if (this.started) return;
+    if (this.started || this.latestVersion !== null) return;
     this.started = true;
     this.connect(false);
   }
@@ -94,6 +102,7 @@ export class TelemetrySession {
     if (this.staleTimer !== null) this.scheduler.clearTimer(this.staleTimer);
     if (this.reconnectTimer !== null) this.scheduler.clearTimer(this.reconnectTimer);
     this.frame = null;
+    this.pendingValues.clear();
     this.staleTimer = null;
     this.reconnectTimer = null;
     this.setConnection("disconnected");
@@ -109,7 +118,7 @@ export class TelemetrySession {
     if (!point) {
       return { value: null, freshness: "waiting", ageMs: null };
     }
-    const ageMs = Math.max(0, this.scheduler.now() - point.updatedAt);
+    const ageMs = this.age(point);
     return {
       value: point.value,
       freshness: ageMs >= this.staleAfterMs ? "stale" : "fresh",
@@ -132,7 +141,7 @@ export class TelemetrySession {
       this.setConnection("connected");
     });
     socket.addEventListener("message", (event) => {
-      if (this.socket !== socket || typeof event.data !== "string") return;
+      if (this.socket !== socket || !this.started || typeof event.data !== "string") return;
       this.queueMessage(event.data);
     });
     socket.addEventListener("close", () => {
@@ -149,22 +158,67 @@ export class TelemetrySession {
     } catch {
       return;
     }
-    if (!isTelemetryMessage(message)) return;
-
-    for (const [dataKey, value] of Object.entries(message.values)) {
-      if (typeof value === "number") this.pendingValues.set(dataKey, value);
+    if (typeof message !== "object" || message === null) return;
+    const frame = message as Record<string, unknown>;
+    if (frame.pageId !== this.options.pageId || !Number.isInteger(frame.pageVersion) ||
+        !["telemetry.snapshot", "telemetry.update", "telemetry.version_changed"].includes(String(frame.type))) return;
+    if ((frame.pageVersion as number) > this.options.pageVersion) {
+      // 丢弃尚未渲染的旧更新，保留已展示观测；新版必须手动重新加载 Schema。
+      this.latestVersion = frame.pageVersion as number;
+      this.stop();
+      this.scheduleStaleCheck();
+      this.notify();
+      return;
+    }
+    if (frame.pageVersion !== this.options.pageVersion ||
+        (frame.type !== "telemetry.snapshot" && frame.type !== "telemetry.update")) return;
+    const serverTime = typeof frame.serverTime === "string" ? Date.parse(frame.serverTime) : NaN;
+    const publishedAt = Date.parse(this.options.publishedAt);
+    if (!Number.isFinite(serverTime) || !Number.isFinite(publishedAt) ||
+        typeof frame.publishedAt !== "string" || Date.parse(frame.publishedAt) !== publishedAt ||
+        typeof frame.observations !== "object" || frame.observations === null || Array.isArray(frame.observations)) return;
+    const receiptTime = this.scheduler.now();
+    let repeatedObservation = false;
+    for (const [dataKey, raw] of Object.entries(frame.observations)) {
+      if (typeof raw !== "object" || raw === null) continue;
+      const item = raw as Record<string, unknown>;
+      const receivedAt = typeof item.receivedAt === "string" ? Date.parse(item.receivedAt) : NaN;
+      if (!Number.isInteger(item.id) || (item.id as number) <= 0 ||
+          typeof item.value !== "number" || !Number.isFinite(item.value) ||
+          !Number.isFinite(receivedAt) || receivedAt < publishedAt || receivedAt > serverTime) continue;
+      const previous = this.pendingValues.get(dataKey) ?? this.points.get(dataKey);
+      if (previous && (receivedAt < previous.receivedAt ||
+          (receivedAt === previous.receivedAt && (item.id as number) < previous.id))) continue;
+      const ageAtReceipt = serverTime - receivedAt;
+      if (previous && previous.id === item.id) {
+        // 重连再次送来同一来源，只能让年龄继续增长，不能回拨到新鲜。
+        previous.ageAtReceipt = Math.max(this.age(previous), ageAtReceipt);
+        previous.receiptTime = receiptTime;
+        repeatedObservation = true;
+        continue;
+      }
+      this.pendingValues.set(dataKey, { id: item.id as number, value: item.value,
+        receivedAt, ageAtReceipt, receiptTime });
     }
     if (this.frame === null && this.pendingValues.size > 0) {
       this.frame = this.scheduler.requestFrame(() => this.flushFrame());
     }
+    if (repeatedObservation && this.pendingValues.size === 0) {
+      this.scheduleStaleCheck();
+      this.notify();
+    }
+  }
+
+  private age(point: StoredPoint): number {
+    return Math.max(0, point.ageAtReceipt + this.scheduler.now() - point.receiptTime);
   }
 
   private flushFrame(): void {
     this.frame = null;
-    const updatedAt = this.scheduler.now();
-    for (const [dataKey, value] of this.pendingValues) {
-      this.points.set(dataKey, { value, updatedAt });
-      const sampledAt = Math.floor(updatedAt / 1000) * 1000;
+    for (const [dataKey, point] of this.pendingValues) {
+      this.points.set(dataKey, point);
+      const value = point.value;
+      const sampledAt = Math.floor(point.receivedAt / 1000) * 1000;
       const samples = this.samples.get(dataKey) ?? [];
       const last = samples.at(-1);
       if (last?.sampledAt === sampledAt) {
@@ -181,11 +235,10 @@ export class TelemetrySession {
 
   private scheduleStaleCheck(): void {
     if (this.staleTimer !== null) this.scheduler.clearTimer(this.staleTimer);
-    const now = this.scheduler.now();
     const nextExpiry = Math.min(
       ...Array.from(this.points.values(), (point) =>
-        point.updatedAt + this.staleAfterMs > now
-          ? point.updatedAt + this.staleAfterMs - now
+        this.age(point) < this.staleAfterMs
+          ? this.staleAfterMs - this.age(point)
           : Number.POSITIVE_INFINITY,
       ),
     );
@@ -219,12 +272,4 @@ export class TelemetrySession {
   private notify(): void {
     this.listeners.forEach((listener) => listener());
   }
-}
-
-function isTelemetryMessage(
-  message: unknown,
-): message is { values: Record<string, unknown> } {
-  if (typeof message !== "object" || message === null) return false;
-  const values = (message as { values?: unknown }).values;
-  return typeof values === "object" && values !== null && !Array.isArray(values);
 }

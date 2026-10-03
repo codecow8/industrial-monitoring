@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import Body, Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from .database import get_session
 from .active import router as active_router
@@ -17,7 +18,7 @@ from .repository import (
     save_draft,
 )
 from .schema_contract import validate_page_schema
-from .telemetry import router as telemetry_router
+from .telemetry import hub as telemetry_hub, router as telemetry_router
 
 
 app = FastAPI(title="Industrial Monitoring API")
@@ -70,13 +71,14 @@ def read_draft(
 
 
 @app.post("/api/pages/{page_key}/publish", response_model=None)
-def publish_page(
+async def publish_page(
     page_key: str,
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
-    published = publish_draft(session, page_key)
+    published = await run_in_threadpool(publish_draft, session, page_key)
     if published is None:
         raise HTTPException(status_code=404, detail="Draft not found")
+    await telemetry_hub.page_published(published)
     return published
 
 

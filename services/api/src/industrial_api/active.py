@@ -1,25 +1,16 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .database import get_session
 from .history import page_conditions
-from .models import TelemetryObservation
+from .freshness import STALE_AFTER_SECONDS, latest_observations, observation
 from .repository import get_published
 
 
 router = APIRouter()
-STALE_AFTER_SECONDS = 5
 ALARM_LIMIT = 20
-
-
-def observation(row: TelemetryObservation) -> dict:
-    return {
-        "id": row.id, "value": row.value,
-        "receivedAt": row.received_at.isoformat(), "sourceTimestamp": row.source_timestamp,
-    }
 
 
 @router.get("/api/pages/{page_key}/active-alarms")
@@ -34,19 +25,7 @@ def read_active_alarms(page_key: str, session: Session = Depends(get_session)) -
     start = max(queried_at - timedelta(hours=24), published_at)
     conditions = page_conditions(published["schema"])
     keys = {condition["dataKey"] for condition in conditions}
-    latest = {}
-    if keys:
-        # PostgreSQL DISTINCT ON 每个键只取最新一条；不能全表限量后误把部分键当作缺数。
-        rows = session.execute(
-            select(TelemetryObservation)
-            .where(TelemetryObservation.data_key.in_(keys),
-                   TelemetryObservation.received_at >= start,
-                   TelemetryObservation.received_at <= queried_at)
-            .distinct(TelemetryObservation.data_key)
-            .order_by(TelemetryObservation.data_key, TelemetryObservation.received_at.desc(),
-                      TelemetryObservation.id.desc())
-        ).scalars().all()
-        latest = {row.data_key: row for row in rows}
+    latest = latest_observations(session, keys, start, queried_at)
 
     missing = sorted(keys - latest.keys())
     stale = [{"dataKey": key, "observation": observation(row)} for key, row in latest.items()

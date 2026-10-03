@@ -11,6 +11,7 @@ const props = defineProps<{
   registry: ComponentRegistry;
   dataPoints?: Record<string, DataPointView>;
   trendSamples?: Record<string, readonly TrendSampleView[]>;
+  businessQueriesBlocked?: boolean;
   onAnalyzeAlarm?: (alarm: ActiveAlarmView) => void;
   onShowAlarmHistory?: () => void;
 }>();
@@ -70,6 +71,7 @@ function dataPointFor(node: ComponentNode): DataPointView {
         :data-point="node.type === 'alarm-list' || node.type === 'text-block' ? undefined : dataPointFor(node)"
         :trend-samples="node.type === 'trend-chart' ? (trendSamples?.[node.props.dataKey] ?? []) : undefined"
         :alarm-summary="node.type === 'alarm-list' ? alarmSummary : undefined"
+        :actions-blocked="businessQueriesBlocked"
         :example="node.type === 'alarm-list' && dataPoints === undefined"
         :on-analyze="node.type === 'alarm-list' ? onAnalyzeAlarm : undefined"
         :on-history="node.type === 'alarm-list' ? onShowAlarmHistory : undefined"

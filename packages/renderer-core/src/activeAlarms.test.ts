@@ -10,6 +10,7 @@ describe("resolveActiveAlarms", () => {
       "pump1.outlet_temp": { value: 83, freshness: "fresh", ageMs: 0 },
     })).toEqual({
       status: "ready",
+      coverage: { configured: 1, observed: 1, missing: 0, stale: 0 },
       alarms: [{
         id: "threshold:pump1.outlet_temp:80",
         kind: "threshold",
@@ -128,7 +129,7 @@ describe("resolveActiveAlarms", () => {
   it("reports waiting before any alarm source has data", () => {
     const result = resolveActiveAlarms(createSeedPageSchema(), {});
 
-    expect(result).toEqual({ status: "waiting", alarms: [] });
+    expect(result).toEqual({ status: "waiting", coverage: { configured: 1, observed: 0, missing: 1, stale: 0 }, alarms: [] });
   });
 
   it("keeps an active alarm when its Data Point becomes stale", () => {
@@ -148,6 +149,24 @@ describe("resolveActiveAlarms", () => {
       "pump1.outlet_temp": { value: 68.4, freshness: "fresh", ageMs: 0 },
     });
 
-    expect(result).toEqual({ status: "ready", alarms: [] });
+    expect(result).toEqual({ status: "ready", coverage: { configured: 1, observed: 1, missing: 0, stale: 0 }, alarms: [] });
   });
+});
+
+
+it("marks normal expired values as insufficient evidence", () => {
+  expect(resolveActiveAlarms(createSeedPageSchema(), {
+    "pump1.outlet_temp": { value: 72, freshness: "stale", ageMs: 6000 },
+  })).toMatchObject({ status: "stale", alarms: [], coverage: { stale: 1 } });
+});
+
+it("counts distinct missing sources without treating partial normal data as ready", () => {
+  const schema = createSeedPageSchema();
+  const node = schema.components.find(node => node.type === "metric-card")!;
+  schema.components.push({ ...node, id: "second-metric", props: { ...node.props, dataKey: "other" } } as typeof node);
+  expect(resolveActiveAlarms(schema, {
+    "pump1.outlet_temp": { value: 72, freshness: "fresh", ageMs: 0 },
+  })).toMatchObject({ status: "partial", alarms: [], coverage: { configured: 2, missing: 1 } });
+  schema.components = [];
+  expect(resolveActiveAlarms(schema, {}).status).toBe("unconfigured");
 });

@@ -146,9 +146,9 @@ function deriveActiveAlarms(page, value, deviceState) {
   return alarms;
 }
 
-function AlarmList({ node, alarms = [], freshness = "fresh", ageSeconds = 0, example = false, onPointerDown, onAnalyze, onHistory }) {
-  const waiting = freshness === "waiting";
-  const stale = freshness === "stale";
+function AlarmList({ node, alarms = [], freshness = "fresh", ageSeconds = 0, coverage = null, blocked = false, example = false, onPointerDown, onAnalyze, onHistory }) {
+  const waiting = coverage ? coverage.configured > 0 && coverage.observed === 0 : freshness === "waiting";
+  const uncertain = coverage && (coverage.missing.length > 0 || coverage.stale.length > 0);
   return (
     <div className="alarm-list-card">
       <header className="alarm-list-header" onPointerDown={onPointerDown}>
@@ -157,19 +157,24 @@ function AlarmList({ node, alarms = [], freshness = "fresh", ageSeconds = 0, exa
           {example && <span className="alarm-example-badge">示例数据</span>}
         </div>
         <div className="alarm-list-actions">
-          {onHistory && <button className="alarm-history-button" type="button" onClick={onHistory}><Icon name="history" size={13} />历史</button>}
+          {onHistory && <button className="alarm-history-button" type="button" disabled={blocked} onClick={onHistory}><Icon name="history" size={13} />历史</button>}
           <span className={`alarm-count ${alarms.length ? "active" : ""}`}>{alarms.length} 条</span>
         </div>
       </header>
       <div className="alarm-list-body">
         {waiting && alarms.length === 0 ? (
           <div className="alarm-empty waiting"><Icon name="bell" size={24} /><strong>等待设备数据</strong><span>收到相关 Data Point 后开始判断</span></div>
+        ) : coverage?.configured === 0 && alarms.length === 0 ? (
+          <div className="alarm-empty"><Icon name="bell" size={24} /><strong>未配置告警条件</strong><span>没有可查询的条件，不代表设备正常</span></div>
+        ) : alarms.length === 0 && uncertain ? (
+          <div className="alarm-empty unknown"><span className="alarm-empty-icon">!</span><strong>资料不足，无法确认当前告警</strong><span>{coverage.missing.length ? `仍有 ${coverage.missing.length} 项缺少观测` : `有 ${coverage.stale.length} 项观测已过期`}，不能宣称全部正常</span></div>
         ) : alarms.length === 0 ? (
-          <div className="alarm-empty normal"><span className="alarm-empty-check">✓</span><strong>当前无活动告警</strong><span>所有已配置条件均处于正常状态</span></div>
+          <div className="alarm-empty normal"><span className="alarm-empty-check">✓</span><strong>本次观测未触发已配置条件</strong><span>已收到相关新鲜观测，不代表设备健康</span></div>
         ) : (
           <div className="alarm-rows">
+            {uncertain && <div className="alarm-data-notice">{coverage.missing.length > 0 ? `缺少 ${coverage.missing.length} 项观测。` : ""}{coverage.stale.length > 0 ? `${coverage.stale.length} 项观测已过期。` : ""}最后观测触发的告警保留，当前状态需核实。</div>}
             {alarms.map((alarm) => (
-              <article className={`alarm-row ${alarm.kind} ${stale ? "stale" : ""}`} key={alarm.id}>
+              <article className={`alarm-row ${alarm.kind} ${(alarm.freshness ?? freshness) === "stale" ? "stale" : ""}`} key={alarm.id}>
                 <span className="alarm-kind-icon"><Icon name={alarm.kind === "fault" ? "device" : "bell"} size={18} /></span>
                 <div className="alarm-row-copy">
                   <strong>{alarm.title}</strong>
@@ -178,8 +183,8 @@ function AlarmList({ node, alarms = [], freshness = "fresh", ageSeconds = 0, exa
                 </div>
                 <div className="alarm-row-value">
                   <strong>{alarm.valueText}</strong>
-                  <span className={stale ? "stale" : "fresh"}>{stale ? `数据已过期 · ${ageSeconds}秒前` : "数据新鲜"}</span>
-                  {onAnalyze && <button className="alarm-analyze-button" type="button" onClick={() => onAnalyze(alarm)}><Icon name="spark" size={13} />智能分析</button>}
+                  <span className={(alarm.freshness ?? freshness) === "stale" ? "stale" : "fresh"}>{(alarm.freshness ?? freshness) === "stale" ? `数据已过期 · ${alarm.ageSeconds ?? ageSeconds}秒前` : "数据新鲜"}</span>
+                  {onAnalyze && <button className="alarm-analyze-button" type="button" disabled={blocked} onClick={() => onAnalyze(alarm)}><Icon name="spark" size={13} />智能分析</button>}
                 </div>
               </article>
             ))}
@@ -773,31 +778,61 @@ function HistoryDrawer({ status, onClose, onRetry, onSetStatus }) {
   </div>;
 }
 
-function TrendRuntime({ published, onBack }) {
+function TrendRuntime({ published, onBack, onSimulatePublish }) {
   const sequence = [68.4, 72.0, 78.5, 81.2, 83.0, 79.0, 74.0];
   const stateSequence = [1, 3, 1, 2, 0, 1];
   const indexRef = useRef(0), stateIndexRef = useRef(0), timersRef = useRef([]);
   const [value, setValue] = useState(null), [samples, setSamples] = useState([]);
   const [deviceState, setDeviceState] = useState(null);
-  const [connection, setConnection] = useState("connecting"), [freshness, setFreshness] = useState("waiting");
+  const [connection, setConnection] = useState("connecting");
   const [lastUpdated, setLastUpdated] = useState(null), [paused, setPaused] = useState(false), [reconnectStep, setReconnectStep] = useState(0), [now, setNow] = useState(Date.now());
+  const [stateUpdated, setStateUpdated] = useState(null), [viewPublished, setViewPublished] = useState(published);
+  const [timeCase, setTimeCase] = useState("live"), [clientOffset, setClientOffset] = useState(0);
+  const serverClock = useRef({ epoch: Date.now(), monotonic: performance.now() });
+  const serverNow = () => serverClock.current.epoch + performance.now() - serverClock.current.monotonic;
+  const versionChanged = !!published && !!viewPublished && published.version !== viewPublished.version;
+  const versionChangedRef = useRef(false);
+  versionChangedRef.current = versionChanged;
   const [analysisAlarm, setAnalysisAlarm] = useState(null), [analysisStatus, setAnalysisStatus] = useState("loading");
   const analysisTimerRef = useRef(null);
   const [historyOpen, setHistoryOpen] = useState(false), [historyStatus, setHistoryStatus] = useState("loading");
   const historyTimerRef = useRef(null);
-  const page = published?.schema;
-  const appendValue = (nextValue) => { const timestamp = Date.now(); setValue(nextValue); setLastUpdated(timestamp); setFreshness("fresh"); setSamples((current) => { const next = [...current]; const previous = [...next].reverse().find((sample) => sample.value !== null); if (previous && timestamp - previous.time > 2200) next.push({ time: timestamp - 700, value: null }); next.push({ time: timestamp, value: nextValue }); return next.filter((sample) => sample.time >= timestamp - 60000).slice(-60); }); };
-  const emitNext = () => { const nextValue = sequence[indexRef.current % sequence.length]; const nextState = stateSequence[stateIndexRef.current % stateSequence.length]; indexRef.current += 1; stateIndexRef.current += 1; setDeviceState(nextState); appendValue(nextValue); };
-  const selectDeviceState = (stateCode) => { setPaused(true); setConnection("connected"); setDeviceState(stateCode); setLastUpdated(Date.now()); setFreshness("fresh"); };
-  useEffect(() => { const clock = window.setInterval(() => setNow(Date.now()), 500); if (page) timersRef.current.push(window.setTimeout(() => { setConnection("connected"); emitNext(); }, 700)); return () => { window.clearInterval(clock); timersRef.current.forEach(window.clearTimeout); }; }, [Boolean(page)]);
-  useEffect(() => { if (!page || connection !== "connected" || paused) return undefined; const timer = window.setInterval(emitNext, 1000); return () => window.clearInterval(timer); }, [Boolean(page), connection, paused]);
-  useEffect(() => { if (value === null) setFreshness("waiting"); else if (lastUpdated && now - lastUpdated >= 5000) setFreshness("stale"); }, [now, lastUpdated, value]);
+  const page = viewPublished?.schema;
+  const appendValue = (nextValue, receivedAt = serverNow()) => { if (versionChangedRef.current) return; setValue(nextValue); setLastUpdated(receivedAt); setSamples((current) => { const next = [...current]; const previous = [...next].reverse().find((sample) => sample.value !== null); if (previous && receivedAt - previous.time > 2200) next.push({ time: receivedAt - 700, value: null }); next.push({ time: receivedAt, value: nextValue }); return next.filter((sample) => sample.time >= receivedAt - 60000).slice(-60); }); };
+  const emitNext = () => { if (versionChangedRef.current) return; const nextValue = sequence[indexRef.current % sequence.length]; const nextState = stateSequence[stateIndexRef.current % stateSequence.length]; indexRef.current += 1; stateIndexRef.current += 1; setDeviceState(nextState); setStateUpdated(serverNow()); appendValue(nextValue); };
+  const selectDeviceState = (stateCode) => { if (versionChangedRef.current) return; setPaused(true); setConnection("connected"); setDeviceState(stateCode); setStateUpdated(serverNow()); };
+  useEffect(() => { const clock = window.setInterval(() => setNow(serverNow()), 500); if (page) timersRef.current.push(window.setTimeout(() => { setConnection("connected"); emitNext(); }, 700)); return () => { window.clearInterval(clock); timersRef.current.forEach(window.clearTimeout); }; }, [Boolean(page)]);
+  useEffect(() => { if (!page || connection !== "connected" || paused || versionChanged) return undefined; const timer = window.setInterval(emitNext, 1000); return () => window.clearInterval(timer); }, [Boolean(page), connection, paused, versionChanged]);
+  useEffect(() => { if (versionChanged) { setPaused(true); setConnection("disconnected"); } }, [versionChanged]);
+  const freshness = value === null || lastUpdated === null ? "waiting" : now - lastUpdated >= 5000 ? "stale" : "fresh";
+  const stateFreshness = deviceState === null || stateUpdated === null ? "waiting" : now - stateUpdated >= 5000 ? "stale" : "fresh";
   const ageSeconds = lastUpdated ? Math.max(0, Math.floor((now - lastUpdated) / 1000)) : 0;
-  const recover = () => { timersRef.current.forEach(window.clearTimeout); timersRef.current = []; setReconnectStep(0); setPaused(false); setConnection("connected"); setDeviceState(1); appendValue(68.4); };
-  const disconnect = () => { timersRef.current.forEach(window.clearTimeout); timersRef.current = []; setConnection("disconnected"); setPaused(true); setReconnectStep(0); timersRef.current.push(window.setTimeout(() => { setConnection("reconnecting"); setReconnectStep(1); }, 500), window.setTimeout(() => setReconnectStep(2), 1500), window.setTimeout(() => setReconnectStep(3), 3500), window.setTimeout(recover, 7500)); };
-  const connectionText = connection === "connecting" ? "连接中" : connection === "disconnected" ? "连接已断开" : connection === "reconnecting" ? `正在重连 · 第${reconnectStep}次` : freshness === "stale" ? "连接正常 · 数据已过期" : freshness === "waiting" ? "已连接 · 等待数据" : "实时数据已连接";
-  const activeAlarms = deriveActiveAlarms(page, value, deviceState);
+  const stateAgeSeconds = stateUpdated ? Math.max(0, Math.floor((now - stateUpdated) / 1000)) : 0;
+  const pointState = (node) => node.type === "device-state" ? stateFreshness : freshness;
+  const sourceNodes = (page?.components ?? []).filter(node => ["metric-card", "trend-chart", "device-state"].includes(node.type));
+  const sourceKeys = [...new Set(sourceNodes.map(node => node.props.dataKey))];
+  const missing = sourceKeys.filter(key => pointState(sourceNodes.find(node => node.props.dataKey === key)) === "waiting");
+  const old = sourceKeys.filter(key => pointState(sourceNodes.find(node => node.props.dataKey === key)) === "stale");
+  const coverage = { configured: sourceKeys.length, observed: sourceKeys.length - missing.length, missing, stale: old };
+  const recover = () => { if (versionChangedRef.current) return; timersRef.current.forEach(window.clearTimeout); timersRef.current = []; setReconnectStep(0); setTimeCase("live"); setPaused(false); setConnection("connected"); setDeviceState(1); setStateUpdated(serverNow()); appendValue(68.4); };
+  const disconnect = () => { timersRef.current.forEach(window.clearTimeout); timersRef.current = []; setConnection("disconnected"); setPaused(true); setReconnectStep(0); timersRef.current.push(window.setTimeout(() => { setConnection("reconnecting"); setReconnectStep(1); }, 500), window.setTimeout(() => setReconnectStep(2), 1500), window.setTimeout(() => setReconnectStep(3), 3500), window.setTimeout(() => { setConnection("connected"); setReconnectStep(0); }, 7500)); };
+  const reloadPublished = () => { setViewPublished(published); setPaused(true); setValue(null); setDeviceState(null); setLastUpdated(null); setStateUpdated(null); setSamples([]); setConnection("connected"); setTimeCase("missing"); };
+  const selectTimeCase = (variant) => {
+    if (versionChangedRef.current) return;
+    timersRef.current.forEach(window.clearTimeout); timersRef.current = [];
+    setTimeCase(variant); setPaused(true); setConnection("connected"); setSamples([]);
+    const time = serverNow(); setNow(time);
+    if (variant === "live") { recover(); return; }
+    if (variant === "missing") { setValue(null); setDeviceState(null); setLastUpdated(null); setStateUpdated(null); return; }
+    appendValue(variant === "old_snapshot" ? 83 : 68.4, time - (["old_snapshot", "old_normal"].includes(variant) ? 12000 : 0));
+    setDeviceState(variant === "partial" ? null : variant === "old_snapshot" ? 2 : 1);
+    setStateUpdated(variant === "partial" ? null : time - (["old_snapshot", "old_normal", "one_key"].includes(variant) ? 12000 : 0));
+  };
+  const connectionText = versionChanged ? "版本已变化 · 等待刷新" : connection === "connecting" ? "连接中" : connection === "disconnected" ? "连接已断开" : connection === "reconnecting" ? `正在重连 · 第${reconnectStep}次` : old.length ? "连接正常 · 部分数据已过期" : missing.length ? "已连接 · 资料不完整" : "实时数据已连接";
+  const activeAlarms = deriveActiveAlarms(page, value, deviceState).map(alarm => ({ ...alarm,
+    freshness: alarm.kind === "fault" ? stateFreshness : freshness, ageSeconds: alarm.kind === "fault" ? stateAgeSeconds : ageSeconds }));
   const openAnalysis = (alarm) => {
+    if (versionChangedRef.current) return;
     window.clearTimeout(analysisTimerRef.current);
     setAnalysisAlarm(alarm);
     setAnalysisStatus("loading");
@@ -805,7 +840,7 @@ function TrendRuntime({ published, onBack }) {
   };
   const closeAnalysis = () => { window.clearTimeout(analysisTimerRef.current); setAnalysisAlarm(null); };
   const setAnalysisVariant = (nextStatus) => { window.clearTimeout(analysisTimerRef.current); setAnalysisStatus(nextStatus); };
-  const openHistory = () => { window.clearTimeout(historyTimerRef.current); setHistoryOpen(true); setHistoryStatus("loading"); historyTimerRef.current = window.setTimeout(() => setHistoryStatus("ready"), 650); };
+  const openHistory = () => { if (versionChangedRef.current) return; window.clearTimeout(historyTimerRef.current); setHistoryOpen(true); setHistoryStatus("loading"); historyTimerRef.current = window.setTimeout(() => setHistoryStatus("ready"), 650); };
   const closeHistory = () => { window.clearTimeout(historyTimerRef.current); setHistoryOpen(false); };
   useEffect(() => {
     if (!analysisAlarm) return undefined;
@@ -816,10 +851,11 @@ function TrendRuntime({ published, onBack }) {
   useEffect(() => () => window.clearTimeout(analysisTimerRef.current), []);
   useEffect(() => { if (!historyOpen) return undefined; const onKeyDown = (event) => { if (event.key === "Escape") closeHistory(); }; window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown); }, [historyOpen]);
   useEffect(() => () => window.clearTimeout(historyTimerRef.current), []);
-  return <main className="runtime" data-screen-label="运行态趋势预览"><header className="runtime-topbar"><div className="runtime-title"><strong>{page?.name ?? "运行态"}</strong><span>{published ? `发布版本 · v${published.version}` : "尚未发布"}</span></div><div className="runtime-actions"><span className={`runtime-status ${connection} ${freshness}`}>{connectionText}</span><button className="btn btn-secondary" type="button" onClick={onBack}><span className="button-content"><Icon name="arrowLeft" />返回编辑器</span></button></div></header><section className="runtime-canvas">
-    {page ? page.components.map((node) => <div key={node.id} className={`runtime-component ${node.type === "text-block" ? "runtime-text" : ""}`} style={{ left: node.position.x, top: node.position.y, width: node.size.width, height: node.size.height }}>{node.type === "text-block" ? <TextBlock node={node} /> : node.type === "metric-card" ? <MetricCard schema={node} value={value} freshness={freshness} ageSeconds={ageSeconds} /> : node.type === "device-state" ? <DeviceStateCard node={node} stateCode={deviceState} freshness={freshness} ageSeconds={ageSeconds} /> : node.type === "alarm-list" ? <AlarmList node={node} alarms={activeAlarms} freshness={freshness} ageSeconds={ageSeconds} onAnalyze={openAnalysis} onHistory={openHistory} /> : <TrendChart node={node} samples={samples} now={now} freshness={freshness} ageSeconds={ageSeconds} />}</div>) : <div className="runtime-empty" role="status"><strong>页面尚未发布</strong><span>返回编辑器发布后才会显示页面内容。</span></div>}
-    {page && <><div className="prototype-controls" aria-label="原型演示控制"><strong>遥测演示</strong><button className={paused ? "active" : ""} type="button" onClick={() => setPaused((current) => !current)}>{paused ? "恢复上报" : "暂停上报"}</button><button type="button" onClick={() => { setPaused(true); setConnection("connected"); appendValue(83.0); }}>触发告警</button><button type="button" onClick={disconnect}>模拟断线</button><button type="button" onClick={recover}>恢复正常</button></div><div className="prototype-controls device-controls" aria-label="Device State 演示控制"><strong>DEVICE STATE</strong><button type="button" onClick={() => selectDeviceState(1)}>运行</button><button type="button" onClick={() => selectDeviceState(3)}>维护</button><button type="button" onClick={() => selectDeviceState(2)}>故障</button><button type="button" onClick={() => selectDeviceState(0)}>停止</button><button type="button" onClick={() => selectDeviceState(9)}>未知</button></div></>}<div className="runtime-note">活动告警由当前页面的遥测与 Schema 实时计算；数据过期不会自动清除已有告警。</div>
-    {analysisAlarm && <DiagnosisDrawer alarm={analysisAlarm} status={analysisStatus} stale={freshness === "stale"} resolved={!activeAlarms.some((item) => item.id === analysisAlarm.id)} onClose={closeAnalysis} onRetry={() => openAnalysis(analysisAlarm)} onSetStatus={setAnalysisVariant} />}
+  return <main className={`runtime ${versionChanged ? "runtime-old-version" : ""}`} data-screen-label="运行态趋势预览"><header className="runtime-topbar"><div className="runtime-title"><strong>{page?.name ?? "运行态"}</strong><span>{viewPublished ? `发布版本 · v${viewPublished.version}` : "尚未发布"}</span></div><div className="runtime-actions"><span className={`runtime-status ${connection} ${freshness}`}>{connectionText}</span><button className="btn btn-secondary" type="button" onClick={onBack}><span className="button-content"><Icon name="arrowLeft" />返回编辑器</span></button></div></header><section className="runtime-canvas">
+    {versionChanged && <div className="runtime-version-notice" role="alert"><div><strong>已有新发布版本 v{published.version} · 当前 v{viewPublished.version} 仅供查看</strong><p>已暂停合并数据，旧值和布局保留。请手动刷新后查看新版本及其发布后的观测。</p></div><button type="button" onClick={reloadPublished}>刷新到最新发布版本</button></div>}
+    {page ? page.components.map((node) => <div key={node.id} className={`runtime-component ${node.type === "text-block" ? "runtime-text" : ""}`} style={{ left: node.position.x, top: node.position.y, width: node.size.width, height: node.size.height }}>{node.type === "text-block" ? <TextBlock node={node} /> : node.type === "metric-card" ? <MetricCard schema={node} value={value} freshness={freshness} ageSeconds={ageSeconds} /> : node.type === "device-state" ? <DeviceStateCard node={node} stateCode={deviceState} freshness={stateFreshness} ageSeconds={stateAgeSeconds} /> : node.type === "alarm-list" ? <AlarmList node={node} alarms={activeAlarms} freshness={freshness} ageSeconds={ageSeconds} coverage={coverage} blocked={versionChanged} onAnalyze={openAnalysis} onHistory={openHistory} /> : <TrendChart node={node} samples={samples} now={now} freshness={freshness} ageSeconds={ageSeconds} />}</div>) : <div className="runtime-empty" role="status"><strong>页面尚未发布</strong><span>返回编辑器发布后才会显示页面内容。</span></div>}
+    {page && <><div className="prototype-controls" aria-label="原型演示控制"><strong>遥测演示</strong><button disabled={versionChanged} className={paused ? "active" : ""} type="button" onClick={() => setPaused((current) => !current)}>{paused ? "恢复上报" : "暂停上报"}</button><button disabled={versionChanged} type="button" onClick={() => { setPaused(true); setConnection("connected"); appendValue(83.0); }}>触发告警</button><button disabled={versionChanged} type="button" onClick={disconnect}>模拟断线</button><button disabled={versionChanged} type="button" onClick={recover}>恢复正常</button></div><div className="prototype-controls device-controls" aria-label="Device State 演示控制"><strong>DEVICE STATE</strong><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(1)}>运行</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(3)}>维护</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(2)}>故障</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(0)}>停止</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(9)}>未知</button></div><div className="prototype-controls freshness-controls" aria-label="新鲜度原型案例"><strong>原型 · 模拟资料</strong><select aria-label="新鲜度原型案例" value={timeCase} disabled={versionChanged} onChange={event => selectTimeCase(event.target.value)}><option value="live">正常上报</option><option value="partial">部分缺数 · 正常值</option><option value="old_normal">正常值已过期</option><option value="old_snapshot">重连旧快照 · 告警保留</option><option value="one_key">单键更新 · 其他键过期</option><option value="missing">无可用观测</option></select><button type="button" onClick={() => setClientOffset(offset => offset ? 0 : 300000)}>{clientOffset ? "恢复电脑时间" : "模拟电脑快5分钟"}</button><button type="button" disabled={versionChanged} onClick={onSimulatePublish}>模拟发布新版本</button></div></>}<div className="runtime-note">以各键的服务器观测时间判龄；重连不重置旧值年龄。{clientOffset ? "电脑时间已模拟快5分钟，新鲜度不受影响。" : "连接正常不代表资料完整或新鲜。"}</div>
+    {analysisAlarm && <DiagnosisDrawer alarm={analysisAlarm} status={analysisStatus} stale={(analysisAlarm.kind === "fault" ? stateFreshness : freshness) === "stale"} resolved={!activeAlarms.some((item) => item.id === analysisAlarm.id)} onClose={closeAnalysis} onRetry={() => openAnalysis(analysisAlarm)} onSetStatus={setAnalysisVariant} />}
     {historyOpen && <HistoryDrawer status={historyStatus} onClose={closeHistory} onRetry={openHistory} onSetStatus={(nextStatus) => { window.clearTimeout(historyTimerRef.current); setHistoryStatus(nextStatus); }} />}
     </section></main>;
 }
@@ -1224,7 +1260,7 @@ function TrendPrototypeApp() {
   ] });
   useEffect(() => { const handler = (event) => { if (event.key === "Escape" && mode === "runtime" && !document.querySelector("[data-diagnosis-drawer], [data-history-drawer]")) setMode("editor"); }; window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler); }, [mode]);
   const publish = () => { const version = (published?.version ?? 0) + 1; setPublished({ version, schema: JSON.parse(JSON.stringify(pageSchema)) }); return version; };
-  return <>{mode === "runtime" ? <TrendRuntime published={published} onBack={() => setMode("editor")} /> : <TrendEditorV5 pageSchema={pageSchema} setPageSchema={setPageSchema} onPreview={() => setMode("runtime")} onPublish={publish} publishedVersion={published?.version ?? 0} onHelp={() => setHelpOpen(!helpOpen)} />}<ProductHelpPanel pageId={pageSchema.id} pageName={pageSchema.name} publishedVersion={published?.version ?? 0} open={helpOpen && mode === "editor"} onClose={() => setHelpOpen(false)} /></>;
+  return <>{mode === "runtime" ? <TrendRuntime published={published} onBack={() => setMode("editor")} onSimulatePublish={publish} /> : <TrendEditorV5 pageSchema={pageSchema} setPageSchema={setPageSchema} onPreview={() => setMode("runtime")} onPublish={publish} publishedVersion={published?.version ?? 0} onHelp={() => setHelpOpen(!helpOpen)} />}<ProductHelpPanel pageId={pageSchema.id} pageName={pageSchema.name} publishedVersion={published?.version ?? 0} open={helpOpen && mode === "editor"} onClose={() => setHelpOpen(false)} /></>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<TrendPrototypeApp />);
