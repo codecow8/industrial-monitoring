@@ -16,6 +16,8 @@ export interface HelpReply {
   active?: ActiveAlarmToolResult;
 }
 export interface HelpConversation {
+  /** 内部验收元数据来自实际 Pi 会话，不加入面向网页的响应。 */
+  readonly model?: { provider: string; id: string };
   ask(question: string, signal: AbortSignal, command?: HistoryCommand): Promise<HelpReply>;
   dispose(): void;
 }
@@ -120,6 +122,7 @@ export async function createHelpConversation(context: { pageId?: string } = {}):
   // 空会话也保留回退锚点。失败或超时后回到请求前，重试不重复添加用户消息。
   session.sessionManager.appendCustomEntry("product-help-start", {});
   return {
+    model: { provider: session.model.provider, id: session.model.id },
     async ask(question, signal, command) {
       if (command?.queryId) historyTool?.selectQuery(command.queryId);
       const checkpoint = session.sessionManager.getLeafId()!;

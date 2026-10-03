@@ -5,11 +5,12 @@
   "type": "module",
   "packageManager": "pnpm@12.4.1",
   "scripts": {
-    "test": "node --experimental-strip-types --test src/*.test.ts",
+    "test": "node --experimental-strip-types --test src/*.test.ts evals/*.test.ts",
     "typecheck": "tsc --noEmit",
     "dev": "node --experimental-strip-types src/cli.ts",
     "dev:http": "node --experimental-strip-types src/http-main.ts",
-    "eval:help": "node --experimental-strip-types evals/help-remaining.ts"
+    "eval:help": "node --experimental-strip-types evals/help-remaining.ts",
+    "eval:active": "node --experimental-strip-types evals/active-alarms.ts"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.0.0",
