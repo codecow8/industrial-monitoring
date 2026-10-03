@@ -1,0 +1,48 @@
+# Host Nginx owns HTTPS; this server is exposed only on loopback port 8081.
+:80 {
+	respond /healthz "ok" 200
+	encode zstd gzip
+	root * /srv
+
+	# Device telemetry is only accepted on the internal Docker network.
+	@telemetry path /api/telemetry /api/telemetry/*
+	handle @telemetry {
+		respond "Not found" 404
+	}
+
+	handle /api/help* {
+		respond "Product help is not enabled on this demo server" 503
+	}
+
+	@publicRead {
+		method GET
+		path /api/health /api/pages/*/published /api/pages/*/versions/* /api/pages/*/active-alarms /api/pages/*/alarm-history /api/pages/*/alarm-evidence /ws/telemetry/pages/*
+	}
+	handle @publicRead {
+		reverse_proxy api:8000
+	}
+
+	handle /api/* {
+		basic_auth {
+			{$DEMO_USERNAME} {$DEMO_PASSWORD_HASH}
+		}
+		reverse_proxy api:8000
+	}
+
+	handle /editor/* {
+		basic_auth {
+			{$DEMO_USERNAME} {$DEMO_PASSWORD_HASH}
+		}
+		try_files {path} /index.html
+		file_server
+	}
+
+	handle / {
+		redir /runtime/demo 302
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}

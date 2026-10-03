@@ -13,3 +13,6 @@ test-results/
 .idea/
 .DS_Store
 *.local
+.env
+.env.*
+!deploy/.env.example

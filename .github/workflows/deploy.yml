@@ -1,0 +1,116 @@
+name: Verify and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_DB: industrial_monitoring
+          POSTGRES_USER: industrial
+          POSTGRES_PASSWORD: industrial_dev
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U industrial -d industrial_monitoring"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --global pnpm@12.4.1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test && pnpm --filter @industrial/web test:help && pnpm typecheck && pnpm build
+      - run: pnpm --dir services/agent install --frozen-lockfile && pnpm --dir services/agent test
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.8.22'
+          python-version: '3.12'
+      - run: uv sync --frozen && uv run --frozen pytest
+        working-directory: services/api
+      - run: bash -n deploy/deploy.sh
+
+  images:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: [web, api, simulator]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/${{ matrix.service }}.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}-${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  deploy:
+    needs: images
+    if: vars.DEPLOY_READY == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: industrial-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Deploy immutable release
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          RELEASE_SHA: ${{ github.sha }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          release_dir="/opt/industrial-monitoring/$RELEASE_SHA"
+          ssh "$target" "mkdir -p '$release_dir'"
+          scp deploy/compose.yml deploy/deploy.sh "$target:$release_dir/"
+          printf '%s' "$REGISTRY_TOKEN" | ssh "$target" "docker --config '$release_dir/.docker' login ghcr.io -u '$REGISTRY_USER' --password-stdin"
+          ssh "$target" "bash '$release_dir/deploy.sh' '$RELEASE_SHA'"
+      - name: Verify public HTTPS and API
+        env:
+          DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+        run: |
+          [[ "$DOMAIN" =~ ^[a-zA-Z0-9.-]+$ ]]
+          curl --fail --retry 12 --retry-delay 10 --retry-all-errors "https://$DOMAIN/api/health"
+          curl --fail "https://$DOMAIN/runtime/demo" -o /dev/null

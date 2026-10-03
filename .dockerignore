@@ -1,0 +1,15 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/dist
+.git
+.scratch
+.env
+.env.*
+**/*.local
+apps/electron/out
+apps/electron/release
+designs
+playwright-report
+test-results
