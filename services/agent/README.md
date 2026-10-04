@@ -135,7 +135,7 @@ HTTP `active` 存在且 `history` 缺失能证明最终回复使用本轮活动�
 
 ## 显式真实模型验收
 
-剩余 9 个常见问题的接口验收脚本不加入普通 `test`，只有显式启用才消耗模型额度：
+可复测的 9 个常见问题接口脚本不加入普通 `test`，只有显式启用才消耗模型额度：
 
 ```sh
 LIVE_HELP_EVAL=1 pnpm --dir services/agent eval:help
@@ -144,6 +144,18 @@ LIVE_HELP_EVAL=1 pnpm --dir services/agent eval:help Q3 Q11
 ```
 
 每例独立会话，自动核对来源路径、章节及正文与当前指南一致，输出回答供人工检查关键事实。脚本退出成功不等于语义验收通过；Q7 连续追问与 Q14 实际刷新需另行检查。普通开发只运行不耗模型的单元测试，不反复调用此脚本。
+
+该脚本创建未绑定页面的会话，Q13不能查询告警仅指这种会话；编辑器/运行态绑定页会话已有活动与历史工具。
+
+Q1、Q3、Q11的小规模质量复核使用独立入口，先运行普通测试，再显式执行：
+
+```sh
+LIVE_GUIDE_QUALITY_EVAL=1 GUIDE_QUALITY_LOG_FILE=/tmp/industrial-default-help-agent.log pnpm --dir services/agent eval:guide
+# 仅复测已授权的单题，不自动再跑其他题
+LIVE_GUIDE_QUALITY_EVAL=1 GUIDE_QUALITY_LOG_FILE=/tmp/industrial-guide-q11-agent.log pnpm --dir services/agent eval:guide Q11
+```
+
+启动并核对默认8001帮助服务与8000业务API，日志应来自运行中的默认Agent。每题独立登录会话，各提问一次，不重试、不自动改提示词；短期平台账号最后清理。判定器检查响应/requestId、没有混入告警结果、引用正文真实性及本题预期章节。回答完整性依照 `evals/guide-checks.ts` 的事实清单人工审阅，不能用结构通过代替语义通过。原始结果追加保存至 `.scratch/guide-quality/runs/`，包含sessionId、实际模型、首次回答/引用、耗时和结构错误；semanticReview保留pending，人工审阅另写验收记录。退出码只表示结构结果，不是总质量结论。
 
 2026-10-02：14 个固定案例已累计核对通过，详细初轮不足及定向复测记录见 `.scratch/product-help-agent/acceptance.md`。仅完善通用回答完整性及每轮检索规则，没有放宽来源校验。不是任意问法的正确率保证，也没有重跑全量项目 E2E。
 

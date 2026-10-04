@@ -40,6 +40,12 @@ test("真实 Pi 会话只启用指南工具，不加载编程上下文，不保�
       assert.deepEqual(activeSession.getActiveToolNames(), ["search_product_guide", "read_alarm_history", "read_active_alarms"]);
       assert.ok(activeSession.systemPrompt.includes("必须调用 read_active_alarms"));
       assert.ok(!activeSession.systemPrompt.includes("不能修改页面、发布版本、读取活动告警"));
+      // 页绑定替换权限指令后仍保留通用完整性规则，不依赖某题或某组件答案。
+      for (const current of [first, pageSession, activeSession]) {
+        assert.ok(current.systemPrompt.includes("适用范围、能力限制和不支持项"));
+        assert.ok(current.systemPrompt.includes("只报告原文已有的限制"));
+        assert.ok(!current.systemPrompt.includes("冷却系统运行概览"));
+      }
     } finally {
       first.dispose();
       second.dispose();

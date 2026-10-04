@@ -10,7 +10,8 @@
     "dev": "node --experimental-strip-types src/cli.ts",
     "dev:http": "node --experimental-strip-types src/http-main.ts",
     "eval:help": "node --experimental-strip-types evals/help-remaining.ts",
-    "eval:active": "node --experimental-strip-types evals/active-alarms.ts"
+    "eval:active": "node --experimental-strip-types evals/active-alarms.ts",
+    "eval:guide": "node --experimental-strip-types evals/guide-quality.ts"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.0.0",
