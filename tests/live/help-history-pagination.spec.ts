@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../auth-fixtures";
 import { createAlarmHistoryTool } from "../../services/agent/src/alarm-history-tool.ts";
 
 // 显式运行才消耗模型额度和写入短期测试遥测；每次使用独立页面及数据键。

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import "element-plus/es/components/message/style/css";
@@ -12,6 +12,9 @@ import type { ActiveAlarmView, DataPointView } from "@industrial/renderer-core";
 import type { TrendSampleView } from "@industrial/renderer-core";
 import { diagnoseAlarm, loadAlarmHistory, loadPublishedPage } from "@/data/pageRepository";
 import type { AlarmDiagnosis, AlarmHistoryPage, DiagnosisStatement } from "@/data/pageRepository";
+import { checkSession } from "@/data/auth";
+import { authExpiredEvent } from "@/data/authHttp";
+import { bindHelpPage, pauseHelpVersion, productHelp } from "@/data/productHelp";
 import UiIcon from "@/components/UiIcon.vue";
 import AlarmHistoryDrawer from "@/components/AlarmHistoryDrawer.vue";
 
@@ -35,8 +38,17 @@ const historyLoadingMore = ref(false);
 const historyError = ref("");
 let historyRequest = 0;
 let telemetrySession: TelemetrySession | null = null;
+let pageLoadSequence = 0;
+const versionBlocked = computed(() => latestVersion.value !== null ||
+  (productHelp.runtime && productHelp.pageId === String(route.params.pageId) && productHelp.versionPaused));
+watch(versionBlocked, blocked => {
+  if (!blocked) return;
+  telemetrySession?.stop();
+  diagnosisRequest += 1; historyRequest += 1;
+  diagnosisLoading.value = false; historyLoading.value = false; historyLoadingMore.value = false;
+});
 
-const connectionText = computed(() => latestVersion.value ? "版本已变化 · 等待刷新" : ({
+const connectionText = computed(() => versionBlocked.value ? "版本已变化 · 等待刷新" : ({
   disconnected: "实时数据已断开",
   connecting: "正在连接实时数据",
   connected: "实时数据已连接",
@@ -67,7 +79,7 @@ const trendSamples = computed<Record<string, readonly TrendSampleView[]>>(() => 
 });
 
 function websocketUrl(pageId: string, pageVersion: number): string {
-  if (window.industrialDesktop?.wsOrigin) {
+  if (window.location.protocol === "app:" && window.industrialDesktop?.wsOrigin) {
     return `${window.industrialDesktop.wsOrigin}/ws/telemetry/pages/${encodeURIComponent(pageId)}?version=${pageVersion}`;
   }
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -75,7 +87,7 @@ function websocketUrl(pageId: string, pageVersion: number): string {
 }
 
 async function analyzeAlarm(alarm: ActiveAlarmView): Promise<void> {
-  if (latestVersion.value) return;
+  if (versionBlocked.value) return;
   selectedAlarm.value = alarm;
   diagnosis.value = null;
   diagnosisError.value = "";
@@ -98,7 +110,7 @@ function closeDiagnosis(): void {
 }
 
 async function openHistory(): Promise<void> {
-  if (latestVersion.value) return;
+  if (versionBlocked.value) return;
   historyOpen.value = true;
   history.value = null;
   historyError.value = "";
@@ -116,7 +128,7 @@ async function openHistory(): Promise<void> {
 
 async function loadMoreHistory(): Promise<void> {
   const current = history.value;
-  if (latestVersion.value || !current || current.nextOffset === null || historyLoadingMore.value) return;
+  if (versionBlocked.value || !current || current.nextOffset === null || historyLoadingMore.value) return;
   historyLoadingMore.value = true;
   const requestId = historyRequest;
   try {
@@ -148,19 +160,30 @@ function sourceLabel(statement: DiagnosisStatement): string {
   return statement.sourceIds.map((id) => id.startsWith("observation:") ? `观测 #${id.slice(12)}` : id.startsWith("page:") ? `页面配置 v${version.value}` : "PUMP-01 §3.2").join(" · ");
 }
 
-onMounted(async () => {
+watch(() => route.params.pageId, async () => {
+  const sequence = ++pageLoadSequence;
+  telemetrySession?.stop(); telemetrySession = null;
+  schema.value = null; version.value = null; latestVersion.value = null;
+  loading.value = true; connection.value = "disconnected";
+  closeDiagnosis(); closeHistory();
   try {
     const published = await loadPublishedPage(String(route.params.pageId));
+    if (sequence !== pageLoadSequence) return;
+    bindHelpPage(String(route.params.pageId), published?.schema.name ?? "运行态", published?.version ?? 0, true);
     schema.value = published?.schema ?? null;
     version.value = published?.version ?? null;
     if (published) {
       telemetrySession = new TelemetrySession(websocketUrl(published.pageId, published.version), {
         pageId: published.pageId, pageVersion: published.version, publishedAt: published.publishedAt,
+        checkAuthentication: async () => !!await checkSession(),
+        onAuthenticationExpired: () => window.dispatchEvent(new Event(authExpiredEvent)),
       });
       telemetrySession.subscribe(() => {
+        if (sequence !== pageLoadSequence) return;
         connection.value = telemetrySession?.connection ?? "disconnected";
         if (telemetrySession?.latestVersion && !latestVersion.value) {
           latestVersion.value = telemetrySession.latestVersion;
+          pauseHelpVersion(telemetrySession.latestVersion);
           // 已发出的业务请求也不能把新版结果填入旧版布局。
           diagnosisRequest += 1;
           historyRequest += 1;
@@ -173,15 +196,15 @@ onMounted(async () => {
       telemetrySession.start();
     }
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "加载发布版本失败");
+    if (sequence === pageLoadSequence) ElMessage.error(error instanceof Error ? error.message : "加载发布版本失败");
   } finally {
-    loading.value = false;
+    if (sequence === pageLoadSequence) loading.value = false;
   }
-});
+}, { immediate: true });
 
 function reloadPublished(): void { window.location.reload(); }
 
-onBeforeUnmount(() => { telemetrySession?.stop(); historyRequest += 1; diagnosisRequest += 1; });
+onBeforeUnmount(() => { pageLoadSequence += 1; telemetrySession?.stop(); historyRequest += 1; diagnosisRequest += 1; });
 </script>
 
 <template>
@@ -193,21 +216,23 @@ onBeforeUnmount(() => { telemetrySession?.stop(); historyRequest += 1; diagnosis
       </div>
       <div class="runtime-actions">
         <span class="runtime-state" :class="`runtime-state--${connection}`"><i></i>{{ connectionText }}</span>
+        <button class="app-button app-button--secondary" type="button" data-help-entry aria-controls="product-help" :aria-expanded="productHelp.open" :disabled="loading" @click="productHelp.open = !productHelp.open"><UiIcon name="info" />使用帮助</button>
         <button class="app-button app-button--secondary" type="button" @click="router.push({ name: 'editor', params: { pageId: route.params.pageId } })">
           <UiIcon name="back" />返回编辑器
         </button>
+
       </div>
     </header>
     <section class="runtime-viewport">
       <span class="runtime-breadcrumb">生产监控 / 冷却系统</span>
-      <div v-if="latestVersion" class="runtime-version-notice" role="alert">
-        <div><strong>已有新发布版本 v{{ latestVersion }} · 当前 v{{ version }} 仅供查看</strong><p>已暂停合并数据，旧值和布局保留。请手动刷新后查看新版本及其发布后的观测。</p></div>
+      <div v-if="versionBlocked" class="runtime-version-notice" role="alert">
+        <div><strong>{{ latestVersion ? `已有新发布版本 v${latestVersion}` : '查询资料与当前画面不符' }} · 当前 v{{ version ?? 0 }} 仅供查看</strong><p>已暂停合并数据，旧值和布局保留。请手动刷新后查看新版本及其发布后的观测。</p></div>
         <button type="button" @click="reloadPublished">刷新到最新发布版本</button>
       </div>
       <PageRenderer
         v-if="schema"
-        :class="{ 'runtime-old-version': latestVersion !== null }"
-        :business-queries-blocked="latestVersion !== null"
+        :class="{ 'runtime-old-version': versionBlocked }"
+        :business-queries-blocked="versionBlocked"
         :schema="schema"
         :registry="webComponentRegistry"
         :data-points="dataPoints"
@@ -237,7 +262,7 @@ onBeforeUnmount(() => { telemetrySession?.stop(); historyRequest += 1; diagnosis
           <p v-if="alarmRecovered" class="diagnosis-notice">该告警已恢复。以下分析仅针对选中时的历史观测。</p>
           <p v-if="alarmStale" class="diagnosis-notice diagnosis-notice--stale">实时数据已过期；请先核对设备现场状态。</p>
           <div v-if="diagnosisLoading" class="diagnosis-state" role="status"><h3>正在整理告警证据</h3><p>查询遥测观测与模拟手册章节…</p></div>
-          <div v-else-if="diagnosisError" class="diagnosis-state diagnosis-state--error" role="alert"><h3>暂时无法获取分析</h3><p>{{ diagnosisError }}</p><button type="button" :disabled="latestVersion !== null" @click="analyzeAlarm(selectedAlarm!)">重新分析</button></div>
+          <div v-else-if="diagnosisError" class="diagnosis-state diagnosis-state--error" role="alert"><h3>暂时无法获取分析</h3><p>{{ diagnosisError }}</p><button type="button" :disabled="versionBlocked" @click="analyzeAlarm(selectedAlarm!)">重新分析</button></div>
           <template v-else-if="diagnosis">
             <div class="diagnosis-result-status" :class="{ 'diagnosis-result-status--limited': diagnosis.status === 'insufficient_evidence' }"><strong>{{ diagnosis.status === "completed" ? "已整理可核对证据" : "证据不足" }}</strong><span>{{ diagnosis.status === "completed" ? "原因仍需现场排查，不代表自动诊断结论" : "当前值可确认，触发起点与根因尚无法判断" }}</span></div>
             <section class="diagnosis-section"><h3>已观测事实</h3><div v-for="(fact, index) in diagnosis.observedFacts" :key="index" class="diagnosis-fact"><span>{{ index + 1 }}</span><p>{{ fact.text }}<small>来源：{{ sourceLabel(fact) }}</small></p></div></section>
@@ -250,7 +275,7 @@ onBeforeUnmount(() => { telemetrySession?.stop(); historyRequest += 1; diagnosis
     </div>
     <AlarmHistoryDrawer
       v-if="historyOpen"
-      :actions-blocked="latestVersion !== null"
+      :actions-blocked="versionBlocked"
       :history="history"
       :loading="historyLoading"
       :loading-more="historyLoadingMore"

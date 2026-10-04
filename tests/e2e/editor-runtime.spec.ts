@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../auth-fixtures";
 import type { Page } from "@playwright/test";
 
 const browserErrors = new WeakMap<Page, string[]>();

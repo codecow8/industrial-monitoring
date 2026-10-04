@@ -1,3 +1,4 @@
+import { authenticateHelp, LoginRequiredError } from "./authentication.ts";
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
 import { Type } from "typebox";
@@ -15,6 +16,7 @@ const origins = new Set(["http://localhost:5173", "http://127.0.0.1:5173", "http
 type Outcome = { status: number; body: unknown };
 type RequestRecord = { question: string; command: string; result?: HelpReply };
 type Entry = {
+  owner: string;
   conversation: HelpConversation;
   lastUsed: number;
   requests: Map<string, RequestRecord>;
@@ -55,7 +57,8 @@ function readBody(request: IncomingMessage): Promise<unknown> {
 
 /** 注入会话工厂和时钟仅用于接口测试；线上固定 15 分钟闲置、60 秒超时。 */
 export function createHelpHttpServer(options: {
-  createConversation?: (context: { pageId?: string }) => Promise<HelpConversation>;
+  authenticate?: typeof authenticateHelp;
+  createConversation?: (context: { pageId?: string; loginCookie?: string }) => Promise<HelpConversation>;
   now?: () => number;
   idleMs?: number;
   timeoutMs?: number;
@@ -100,7 +103,7 @@ export function createHelpHttpServer(options: {
       respond(failure(504, "MODEL_TIMEOUT", "问答超过 60 秒，请重试这条问题。"));
       // 超时不提前释放会话：SDK 确认终止后才能重试，避免两个模型调用同时修改上下文。
     }, timeoutMs);
-    const finish = (result?: HelpReply) => {
+    const finish = (result?: HelpReply, error?: unknown) => {
       clearTimeout(timeout);
       entry.active = undefined;
       entry.lastUsed = now();
@@ -108,10 +111,11 @@ export function createHelpHttpServer(options: {
       if (result) {
         record.result = result;
         respond({ status: 200, body: { requestId, ...result } });
-      } else respond(failure(502, "MODEL_ERROR", "本次未能生成可核对的回答，请重试这条问题。"));
+      } else if (error instanceof LoginRequiredError) respond(failure(401, "LOGIN_REQUIRED", "登录已过期，请重新登录后继续。"));
+      else respond(failure(502, "MODEL_ERROR", "本次未能生成可核对的回答，请重试这条问题。"));
     };
     Promise.resolve().then(() => entry.conversation.ask(question, controller.signal, command)).then(
-      (result) => finish(result), () => finish(),
+      (result) => finish(result), (error) => finish(undefined, error),
     );
     return response;
   };
@@ -146,6 +150,8 @@ export function createHelpHttpServer(options: {
       if (request.headers["x-industrial-help"] !== "1") throw new HttpError(403, "MISSING_CLIENT_HEADER", "缺少问答客户端标识。");
       if (request.method !== "POST") throw new HttpError(405, "METHOD_NOT_ALLOWED", "仅支持 POST 请求。");
       if (request.headers["content-type"]?.split(";")[0].trim() !== "application/json") throw new HttpError(415, "INVALID_CONTENT_TYPE", "请使用 application/json。");
+      const identity = await (options.authenticate ?? authenticateHelp)(request);
+      if (!identity) throw new HttpError(401, "LOGIN_REQUIRED", "登录已过期，请重新登录后继续。");
       const body = await readBody(request);
       sweep();
       if (request.url === "/api/help/sessions") {
@@ -153,10 +159,10 @@ export function createHelpHttpServer(options: {
         if (entries.size + creating >= 20) throw new HttpError(429, "TOO_MANY_SESSIONS", "本机会话数量已达到上限，请等待闲置会话清理。");
         creating++;
         let conversation: HelpConversation;
-        try { conversation = await factory(body); }
+        try { conversation = await factory({ ...body, loginCookie: identity.cookie }); }
         finally { creating--; }
         const sessionId = randomUUID();
-        entries.set(sessionId, { conversation, lastUsed: now(), requests: new Map() });
+        entries.set(sessionId, { owner: identity.owner, conversation, lastUsed: now(), requests: new Map() });
         send({ status: 201, body: { sessionId, idleTimeoutSeconds: 900 } });
         return;
       }
@@ -164,7 +170,7 @@ export function createHelpHttpServer(options: {
       if (!route || !new RegExp(uuidPattern).test(route[1])) throw new HttpError(404, "NOT_FOUND", "接口不存在。");
       if (!Value.Check(requestSchema, body)) throw new HttpError(400, "INVALID_INPUT", "需要有效请求编号及 1–1000 字的非空问题。");
       const entry = entries.get(route[1]);
-      if (!entry) throw new HttpError(410, "SESSION_EXPIRED", "会话已过期，请开始新会话；之前的对话不会恢复。");
+      if (!entry || entry.owner !== identity.owner) throw new HttpError(410, "SESSION_EXPIRED", "会话已过期，请开始新会话；之前的对话不会恢复。");
       entry.lastUsed = now();
       const { requestId, question, historyCommand } = body as { requestId: string; question: string; historyCommand?: HistoryCommand };
       send(await ask(entry, requestId, question.trim(), historyCommand));

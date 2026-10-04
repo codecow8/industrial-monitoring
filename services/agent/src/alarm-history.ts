@@ -1,3 +1,4 @@
+import { LoginRequiredError } from "./authentication.ts";
 import { get } from "node:http";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
@@ -39,6 +40,7 @@ export type HistoryRead = (
   offset: number,
   asOf?: string,
   signal?: AbortSignal,
+  cookie?: string,
 ) => Promise<AlarmHistoryPage>;
 
 export class HistoryError extends Error {
@@ -123,6 +125,7 @@ export const readAlarmHistory: HistoryRead = async (
   offset,
   asOf,
   signal,
+  cookie,
 ) => {
   const params = new URLSearchParams({ limit: "20", offset: String(offset) });
   if (asOf) params.set("asOf", asOf);
@@ -133,6 +136,7 @@ export const readAlarmHistory: HistoryRead = async (
         port: 8000,
         path: `/api/pages/${encodeURIComponent(pageId)}/alarm-history?${params}`,
         signal,
+        headers: cookie ? { Cookie: cookie } : {},
       },
       (response) => {
         const chunks: Buffer[] = [];
@@ -147,6 +151,7 @@ export const readAlarmHistory: HistoryRead = async (
         });
         response.on("error", reject);
         response.on("end", () => {
+          if (response.statusCode === 401) return reject(new LoginRequiredError());
           if (response.statusCode === 404)
             return reject(
               new HistoryError(

@@ -9,7 +9,7 @@
           "path": "industrial-editor.html",
           "createdAt": "2026-09-18T00:54:59.299Z",
           "status": "approved",
-          "subtitle": "运行态服务器时间、资料不足与发布版本隔离原型",
+          "subtitle": "运行态登录前提、无退出按钮及 Agent 版本暂停原型已批准",
           "viewport": {
             "width": 1440,
             "height": 960
@@ -19,5 +19,5 @@
     }
   },
   "createdAt": "2026-09-12T02:22:21.715Z",
-  "updatedAt": "2026-10-03T04:14:00Z"
+  "updatedAt": "2026-10-03T14:38:38.236Z"
 }

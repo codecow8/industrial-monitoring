@@ -1,3 +1,4 @@
+import { LoginRequiredError } from "./authentication.ts";
 import { get } from "node:http";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
@@ -21,7 +22,7 @@ const snapshot = Type.Object({
 });
 
 export type ActiveAlarmSnapshot = Static<typeof snapshot>;
-export type ActiveAlarmRead = (pageId: string, signal?: AbortSignal) => Promise<ActiveAlarmSnapshot>;
+export type ActiveAlarmRead = (pageId: string, signal?: AbortSignal, cookie?: string) => Promise<ActiveAlarmSnapshot>;
 export class ActiveAlarmError extends Error {
   readonly code: "NOT_PUBLISHED" | "INVALID_RESPONSE" | "QUERY_FAILED";
   constructor(code: ActiveAlarmError["code"], message: string) { super(message); this.code = code; }
@@ -68,10 +69,10 @@ export function validateActiveAlarms(value: unknown, pageId: string): ActiveAlar
 }
 
 /** 地址固定为本机业务 API，模型不能指定 URL、页面或读取其他网络资源。 */
-export const readActiveAlarms: ActiveAlarmRead = async (pageId, signal) => {
+export const readActiveAlarms: ActiveAlarmRead = async (pageId, signal, cookie) => {
   const data = await new Promise<unknown>((resolve, reject) => {
     const request = get({ hostname: "127.0.0.1", port: 8000,
-      path: `/api/pages/${encodeURIComponent(pageId)}/active-alarms`, signal }, (response) => {
+      path: `/api/pages/${encodeURIComponent(pageId)}/active-alarms`, signal, headers: cookie ? { Cookie: cookie } : {} }, (response) => {
       const chunks: Buffer[] = [];
       let size = 0;
       response.on("data", (chunk: Buffer) => {
@@ -81,6 +82,7 @@ export const readActiveAlarms: ActiveAlarmRead = async (pageId, signal) => {
       });
       response.on("error", reject);
       response.on("end", () => {
+        if (response.statusCode === 401) return reject(new LoginRequiredError());
         if (response.statusCode === 404) return reject(new ActiveAlarmError("NOT_PUBLISHED", "当前页面尚未发布，请先手动发布。"));
         if (response.statusCode !== 200) return reject(new ActiveAlarmError("QUERY_FAILED", "查询失败，无法判断是否有活动告警。"));
         try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); }

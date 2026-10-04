@@ -23,16 +23,10 @@
 	}
 
 	handle /api/* {
-		basic_auth {
-			{$DEMO_USERNAME} {$DEMO_PASSWORD_HASH}
-		}
 		reverse_proxy api:8000
 	}
 
 	handle /editor/* {
-		basic_auth {
-			{$DEMO_USERNAME} {$DEMO_PASSWORD_HASH}
-		}
 		try_files {path} /index.html
 		file_server
 	}

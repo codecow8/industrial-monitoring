@@ -7,7 +7,7 @@ Existing EverDojo containers and host Nginx remain in place. Industrial uses loo
 
 1. Add the `industrial` A record to `39.106.98.214`; confirm domain filing status with the hosting provider before public launch.
 2. Create `/opt/industrial-monitoring`, owned by the SSH deployment user. The user needs Docker access (equivalent to administrative access).
-3. Copy `.env.example` to `/opt/industrial-monitoring/.env`, mode 600. Set a random hex database password and bcrypt demo password hash. Leave AI keys empty until you want paid diagnosis requests. Later password changes also require updating the existing database role password.
+3. Copy `.env.example` to `/opt/industrial-monitoring/.env`, mode 600. Set a random hex database password and DEPLOY_DOMAIN. Leave AI keys empty until you want paid diagnosis requests. Later password changes also require updating the existing database role password.
 4. Install `nginx.conf` as a separate host site, run `nginx -t`, then reload. Once DNS resolves, run `sudo certbot --nginx -d industrial.everdojo.cn` and verify renewal with `sudo certbot renew --dry-run`.
 5. Configure GitHub secrets/variables below. Actions passes a temporary read-only GHCR token to an isolated Docker config directory for each release and logs out afterward. Packages can remain private even though the code repository is public. Manual deployments require GHCR read access and the fixed database image already cached on the server.
 
@@ -55,9 +55,17 @@ RELEASE_SHA=$(basename "$(pwd -P)") docker compose --env-file ../.env -f compose
 
 ## Demo access
 
-- Public: `/runtime/demo`, published schemas, alarm snapshots/history/evidence and WebSocket telemetry.
-- Basic Auth: `/editor/demo`, drafts, publishing, diagnosis and other API routes. Sharing the account also grants editing rights; only give it to trusted reviewers.
+- Login required: editor/runtime pages, published schemas, alarm snapshots/history/evidence and WebSocket telemetry. Health and login remain reachable without a session; device ingestion retains its internal-network contract.
+- Account login: `/editor/demo`, drafts, publishing, diagnosis and other API routes. Sharing the account also grants editing rights; only give it to trusted reviewers.
 - Telemetry ingestion: internal Docker network only; denied at gateway.
 - Product help: 503; personal Pi credentials are not deployed.
 
-First open `/editor/demo`, enter the demo account, save and publish. Then open `/runtime/demo` without credentials. Verify realtime WebSocket updates, page refresh, unauthorized writes (401), telemetry denial (404), and existing EverDojo availability.
+After the authentication migration, provision the first account in the deployed API container (existing Basic Auth credentials are not imported):
+
+```bash
+docker compose --env-file ../.env -f compose.yml exec api python -m industrial_api.create_user demo-admin
+```
+
+The command prompts twice without echoing the password. It refuses to overwrite existing accounts. Run it after the first deployment and before distributing editor access. Browser accounts are stored in PostgreSQL; sessions expire after eight hours and logout revokes them. HTTPS deployment sets Secure cookies. The API has no published port; forwarded client addresses are trusted only from the internal Docker network. Login is limited to ten attempts per client per minute.
+
+First open `/editor/demo`, sign in, save and publish. Then open `/runtime/demo` with the same login. Anonymous schema/alarm reads and WebSocket subscriptions must be rejected. Verify realtime WebSocket updates, page refresh, unauthorized writes (401), telemetry denial (404), and existing EverDojo availability.

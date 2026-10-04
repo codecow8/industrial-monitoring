@@ -13,7 +13,7 @@
 
 Task 1 不包含后端、WebSocket、ECharts、Electron、小程序或 Agent。
 
-Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task 3 已完成实时趋势图、组件右键删除、设备状态、活动告警列表和 Electron 桌面壳。小程序、真实设备、持久化历史曲线和 Agent 仍不在当前实现范围内。
+Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task 3 已完成实时趋势图、组件右键删除、设备状态、活动告警列表和 Electron 桌面壳。后续已接入本机 Web Pi SDK 产品帮助，支持指南、活动告警和历史告警查询。小程序、真实设备和持久化历史曲线仍不在当前实现范围内。
 
 ## 目录职责
 
@@ -25,7 +25,7 @@ packages/renderer-core   不依赖 Pinia 的 DOM Renderer
 packages/components-web  指标卡、实时趋势图、设备状态、活动告警列表、纯文本块和 Web 组件注册表
 packages/telemetry-client WebSocket 会话、帧合并、过期与重连状态
 services/api             FastAPI 页面/遥测接口与 Alembic 迁移
-services/agent           Pi SDK 产品使用问答，仅本机、只读指南检索
+services/agent           Pi SDK 产品使用问答，仅本机 Web、只读指南与活动/历史告警查询
 services/simulator       每秒推送确定性温度和设备状态序列的独立 Python 进程
 fixtures                 前后端共享的 PageSchema 合同和样例
 ```
@@ -120,9 +120,24 @@ pnpm dev:simulator
 
 默认地址：`http://127.0.0.1:5173/editor/demo`。Vite 将业务 `/api` 和 `/ws` 代理到 `http://127.0.0.1:8000`，`/api/help` 单独代理到 8001。发布 `demo` 页后打开运行态，指标卡会按 `68.4 → 72.0 → 78.5 → 81.2 → 83.0 → 79.0 → 74.0` 循环更新，设备状态会按“运行 → 维护 → 运行 → 故障 → 停止 → 运行”循环更新。
 
+## 账号登录
+
+先迁移数据库，再创建登录账号（密码交互输入，不进入命令历史）：
+
+```bash
+cd services/api
+uv run --python 3.12 python -m industrial_api.create_user admin
+```
+
+也可追加 `--generate` 生成随机初始密码，仅输出一次。无默认账号或固定密码；账号保存 scrypt 哈希，登录会话在 PostgreSQL 保存令牌哈希。浏览器使用 HttpOnly / SameSite=Lax Cookie，会话固定八小时，退出立即撤销。登录每个客户端每分钟最多十次尝试。
+
+未登录访问 `/editor/:pageId` 或 `/runtime/:pageId` 会进入 `/login`，成功后返回原目标。编辑、草稿读取、发布、智能分析以及本机产品帮助需要登录。运行态顶栏保留使用帮助与返回编辑器，退出登录在编辑器操作。后台发布版本、指定版本、活动/历史告警及观测依据读取与遥测 WebSocket 均要求有效平台登录。WS 在握手、推送前和无消息期间复验会话；退出、过期或重登撤销旧身份后正常服务条件下最迟 5 秒关闭旧连接。遥测写入仍由部署网关限制为内部网络。Cookie 不写 localStorage；会话失效后显示重新登录提示，同账号重登可继续内存中未保存的草稿，刷新仍会丢失未保存修改。
+
+生产环境设置 `AUTH_COOKIE_SECURE=true`，`AUTH_ALLOWED_ORIGINS=https://你的域名`。本地 HTTP 默认关闭 Secure，允许 localhost/127.0.0.1 的 5173、4173、4174。部署认证从网关 Basic Auth 改为应用账号，旧网关凭据不会导入，需按 [部署说明](./deploy/README.md) 创建首个账号。Electron 开发态复用 Web 登录；打包态由主进程通过 Electron Cookie 存储转发后端会话，令牌不暴露给页面 JavaScript。自定义协议的登录/会话/退出链路已通过真实 Electron 网络栈验证；打包 GUI 和远程 HTTPS 后端尚需设备验收。
+
 ## 产品使用帮助
 
-编辑器顶部“使用帮助”通过 Pi SDK 检索 [产品操作指南](./docs/product-guide.md)，并只读查询当前页面的活动告警快照及已恢复历史。操作回答附指南来源，历史每批 20 条并支持继续查看；活动结果最多 20 条，按服务器最新观测判断，5 秒未更新标记过期，可手动重新查询并展开依据。它不修改页面、不代为发布或控制设备。
+编辑器和运行态顶部“使用帮助”通过 Pi SDK 检索 [产品操作指南](./docs/product-guide.md)，并只读查询当前页面的活动告警快照及已恢复历史。操作回答附指南来源，历史每批 20 条并支持继续查看；活动结果最多 20 条，按服务器最新观测判断，5 秒未更新标记过期，可手动重新查询并展开依据。它不修改页面、不代为发布或控制设备。
 
 Agent 要求 Node >=22.19.0，使用独立 pnpm 锁文件。先在本机 Pi 配置模型并登录，再从根目录运行：
 
@@ -131,7 +146,7 @@ pnpm --dir services/agent install --frozen-lockfile
 pnpm dev:agent
 ```
 
-服务仅监听 `127.0.0.1:8001`，复用 Pi 登录，不复用上文告警分析的 DeepSeek 环境变量。网页侧栏关闭后保留本次对话、刷新后清空，后台闲置 15 分钟后清理；过期需要主动开始新会话。当前不开放 Electron 或多人共享个人登录。
+服务仅监听 `127.0.0.1:8001`，复用 Pi 登录，不复用上文告警分析的 DeepSeek 环境变量。网页侧栏同页同发布版本跨入口保留对话，关闭后保留、刷新后清空；换页、换版本或退出登录重置。旧运行态发现新版后只读保留旧对话，暂停发送和查询，返回版本不符的资料也被拒绝；刷新后进入新版新会话。后台闲置 15 分钟后清理；过期需要主动开始新会话。当前不开放 Electron 或多人共享个人登录。
 
 客户端测试为 `pnpm --filter @industrial/web test:help`，Agent 测试为 `pnpm --dir services/agent test`。真实模型验收需显式启用，不随普通测试运行。更多启动、安全边界及验收说明见 [Agent README](./services/agent/README.md)。
 

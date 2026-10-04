@@ -20,7 +20,7 @@ export interface TrendSample {
 export interface TelemetrySocket {
   addEventListener(
     type: string,
-    listener: (event: { data?: string }) => void,
+    listener: (event: { data?: string; code?: number }) => void,
   ): void;
   close(): void;
 }
@@ -40,6 +40,8 @@ interface TelemetrySessionOptions {
   createSocket?: (url: string) => TelemetrySocket;
   scheduler?: TelemetryScheduler;
   staleAfterMs?: number;
+  checkAuthentication?: () => Promise<boolean>;
+  onAuthenticationExpired?: () => void;
 }
 
 interface StoredPoint {
@@ -62,6 +64,7 @@ const browserScheduler: TelemetryScheduler = {
 export class TelemetrySession {
   connection: ConnectionState = "disconnected";
   latestVersion: number | null = null;
+  authenticationExpired = false;
 
   private readonly scheduler: TelemetryScheduler;
   private readonly createSocket: (url: string) => TelemetrySocket;
@@ -89,7 +92,7 @@ export class TelemetrySession {
   }
 
   start(): void {
-    if (this.started || this.latestVersion !== null) return;
+    if (this.started || this.latestVersion !== null || this.authenticationExpired) return;
     this.started = true;
     this.connect(false);
   }
@@ -144,11 +147,31 @@ export class TelemetrySession {
       if (this.socket !== socket || !this.started || typeof event.data !== "string") return;
       this.queueMessage(event.data);
     });
-    socket.addEventListener("close", () => {
+    socket.addEventListener("close", (event) => {
       if (this.socket !== socket || !this.started) return;
       this.socket = null;
-      this.scheduleReconnect();
+      if (event.code === 4401) this.expireAuthentication();
+      else if (this.options.checkAuthentication) void this.checkBeforeReconnect();
+      else this.scheduleReconnect();
     });
+  }
+
+  private expireAuthentication(): void {
+    if (this.authenticationExpired) return;
+    this.authenticationExpired = true;
+    this.stop();
+    this.options.onAuthenticationExpired?.();
+  }
+
+  private async checkBeforeReconnect(): Promise<void> {
+    try {
+      // 未升级的握手拒绝只表现为普通关闭；先查身份，不把网络故障误当注销。
+      if (!await this.options.checkAuthentication!()) {
+        this.expireAuthentication();
+        return;
+      }
+    } catch { /* 无法核对身份时维持断线，后续连接仍需服务端认证。 */ }
+    if (this.started) this.scheduleReconnect();
   }
 
   private queueMessage(rawMessage: string): void {

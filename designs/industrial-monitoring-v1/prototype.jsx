@@ -31,6 +31,8 @@ function Icon({ name, size = 16 }) {
     redo: <><path d="m15 7 4 4-4 4"></path><path d="M19 11h-8a6 6 0 0 0-6 6"></path></>,
     trash: <><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="M7 7l1 14h8l1-14"></path><path d="M10 11v6M14 11v6"></path></>,
     close: <><path d="m6 6 12 12"></path><path d="m18 6-12 12"></path></>,
+    eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></>,
+    eyeOff: <><path d="m3 3 18 18"></path><path d="M10.6 5.1A11 11 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3.1 3.9M6.1 6.1A18 18 0 0 0 2 12s3.5 7 10 7a12 12 0 0 0 5.9-1.9"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path></>,
     arrowLeft: <><path d="m15 18-6-6 6-6"></path><path d="M9 12h11"></path></>,
   };
 
@@ -778,7 +780,7 @@ function HistoryDrawer({ status, onClose, onRetry, onSetStatus }) {
   </div>;
 }
 
-function TrendRuntime({ published, onBack, onSimulatePublish }) {
+function TrendRuntime({ published, onBack, onSimulatePublish, onExpire, onHelp, onViewChange, refreshToken }) {
   const sequence = [68.4, 72.0, 78.5, 81.2, 83.0, 79.0, 74.0];
   const stateSequence = [1, 3, 1, 2, 0, 1];
   const indexRef = useRef(0), stateIndexRef = useRef(0), timersRef = useRef([]);
@@ -816,7 +818,10 @@ function TrendRuntime({ published, onBack, onSimulatePublish }) {
   const coverage = { configured: sourceKeys.length, observed: sourceKeys.length - missing.length, missing, stale: old };
   const recover = () => { if (versionChangedRef.current) return; timersRef.current.forEach(window.clearTimeout); timersRef.current = []; setReconnectStep(0); setTimeCase("live"); setPaused(false); setConnection("connected"); setDeviceState(1); setStateUpdated(serverNow()); appendValue(68.4); };
   const disconnect = () => { timersRef.current.forEach(window.clearTimeout); timersRef.current = []; setConnection("disconnected"); setPaused(true); setReconnectStep(0); timersRef.current.push(window.setTimeout(() => { setConnection("reconnecting"); setReconnectStep(1); }, 500), window.setTimeout(() => setReconnectStep(2), 1500), window.setTimeout(() => setReconnectStep(3), 3500), window.setTimeout(() => { setConnection("connected"); setReconnectStep(0); }, 7500)); };
+  useEffect(() => { onViewChange(viewPublished); }, [viewPublished, onViewChange]);
   const reloadPublished = () => { setViewPublished(published); setPaused(true); setValue(null); setDeviceState(null); setLastUpdated(null); setStateUpdated(null); setSamples([]); setConnection("connected"); setTimeCase("missing"); };
+  const refreshSeen = useRef(refreshToken);
+  useEffect(() => { if (refreshSeen.current === refreshToken) return; refreshSeen.current = refreshToken; reloadPublished(); }, [refreshToken]);
   const selectTimeCase = (variant) => {
     if (versionChangedRef.current) return;
     timersRef.current.forEach(window.clearTimeout); timersRef.current = [];
@@ -851,16 +856,16 @@ function TrendRuntime({ published, onBack, onSimulatePublish }) {
   useEffect(() => () => window.clearTimeout(analysisTimerRef.current), []);
   useEffect(() => { if (!historyOpen) return undefined; const onKeyDown = (event) => { if (event.key === "Escape") closeHistory(); }; window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown); }, [historyOpen]);
   useEffect(() => () => window.clearTimeout(historyTimerRef.current), []);
-  return <main className={`runtime ${versionChanged ? "runtime-old-version" : ""}`} data-screen-label="运行态趋势预览"><header className="runtime-topbar"><div className="runtime-title"><strong>{page?.name ?? "运行态"}</strong><span>{viewPublished ? `发布版本 · v${viewPublished.version}` : "尚未发布"}</span></div><div className="runtime-actions"><span className={`runtime-status ${connection} ${freshness}`}>{connectionText}</span><button className="btn btn-secondary" type="button" onClick={onBack}><span className="button-content"><Icon name="arrowLeft" />返回编辑器</span></button></div></header><section className="runtime-canvas">
+  return <main className={`runtime ${versionChanged ? "runtime-old-version" : ""}`} data-screen-label="运行态趋势预览"><header className="runtime-topbar"><div className="runtime-title"><strong>{page?.name ?? "运行态"}</strong><span>{viewPublished ? `发布版本 · v${viewPublished.version}` : "尚未发布"}</span></div><div className="runtime-actions"><span className={`runtime-status ${connection} ${freshness}`}>{connectionText}</span><button className="btn btn-secondary" type="button" data-help-entry aria-controls="product-help" onClick={onHelp}><span className="button-content"><Icon name="info" />使用帮助</span></button><button className="btn btn-secondary" type="button" onClick={onBack}><span className="button-content"><Icon name="arrowLeft" />返回编辑器</span></button></div></header><section className="runtime-canvas">
     {versionChanged && <div className="runtime-version-notice" role="alert"><div><strong>已有新发布版本 v{published.version} · 当前 v{viewPublished.version} 仅供查看</strong><p>已暂停合并数据，旧值和布局保留。请手动刷新后查看新版本及其发布后的观测。</p></div><button type="button" onClick={reloadPublished}>刷新到最新发布版本</button></div>}
     {page ? page.components.map((node) => <div key={node.id} className={`runtime-component ${node.type === "text-block" ? "runtime-text" : ""}`} style={{ left: node.position.x, top: node.position.y, width: node.size.width, height: node.size.height }}>{node.type === "text-block" ? <TextBlock node={node} /> : node.type === "metric-card" ? <MetricCard schema={node} value={value} freshness={freshness} ageSeconds={ageSeconds} /> : node.type === "device-state" ? <DeviceStateCard node={node} stateCode={deviceState} freshness={stateFreshness} ageSeconds={stateAgeSeconds} /> : node.type === "alarm-list" ? <AlarmList node={node} alarms={activeAlarms} freshness={freshness} ageSeconds={ageSeconds} coverage={coverage} blocked={versionChanged} onAnalyze={openAnalysis} onHistory={openHistory} /> : <TrendChart node={node} samples={samples} now={now} freshness={freshness} ageSeconds={ageSeconds} />}</div>) : <div className="runtime-empty" role="status"><strong>页面尚未发布</strong><span>返回编辑器发布后才会显示页面内容。</span></div>}
-    {page && <><div className="prototype-controls" aria-label="原型演示控制"><strong>遥测演示</strong><button disabled={versionChanged} className={paused ? "active" : ""} type="button" onClick={() => setPaused((current) => !current)}>{paused ? "恢复上报" : "暂停上报"}</button><button disabled={versionChanged} type="button" onClick={() => { setPaused(true); setConnection("connected"); appendValue(83.0); }}>触发告警</button><button disabled={versionChanged} type="button" onClick={disconnect}>模拟断线</button><button disabled={versionChanged} type="button" onClick={recover}>恢复正常</button></div><div className="prototype-controls device-controls" aria-label="Device State 演示控制"><strong>DEVICE STATE</strong><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(1)}>运行</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(3)}>维护</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(2)}>故障</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(0)}>停止</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(9)}>未知</button></div><div className="prototype-controls freshness-controls" aria-label="新鲜度原型案例"><strong>原型 · 模拟资料</strong><select aria-label="新鲜度原型案例" value={timeCase} disabled={versionChanged} onChange={event => selectTimeCase(event.target.value)}><option value="live">正常上报</option><option value="partial">部分缺数 · 正常值</option><option value="old_normal">正常值已过期</option><option value="old_snapshot">重连旧快照 · 告警保留</option><option value="one_key">单键更新 · 其他键过期</option><option value="missing">无可用观测</option></select><button type="button" onClick={() => setClientOffset(offset => offset ? 0 : 300000)}>{clientOffset ? "恢复电脑时间" : "模拟电脑快5分钟"}</button><button type="button" disabled={versionChanged} onClick={onSimulatePublish}>模拟发布新版本</button></div></>}<div className="runtime-note">以各键的服务器观测时间判龄；重连不重置旧值年龄。{clientOffset ? "电脑时间已模拟快5分钟，新鲜度不受影响。" : "连接正常不代表资料完整或新鲜。"}</div>
+    {page && <><div className="prototype-controls" aria-label="原型演示控制"><strong>遥测演示</strong><button disabled={versionChanged} className={paused ? "active" : ""} type="button" onClick={() => setPaused((current) => !current)}>{paused ? "恢复上报" : "暂停上报"}</button><button disabled={versionChanged} type="button" onClick={() => { setPaused(true); setConnection("connected"); appendValue(83.0); }}>触发告警</button><button disabled={versionChanged} type="button" onClick={disconnect}>模拟断线</button><button disabled={versionChanged} type="button" onClick={recover}>恢复正常</button></div><div className="prototype-controls device-controls" aria-label="Device State 演示控制"><strong>DEVICE STATE</strong><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(1)}>运行</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(3)}>维护</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(2)}>故障</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(0)}>停止</button><button disabled={versionChanged} type="button" onClick={() => selectDeviceState(9)}>未知</button></div><div className="prototype-controls freshness-controls" aria-label="新鲜度原型案例"><strong>原型 · 模拟资料</strong><select aria-label="新鲜度原型案例" value={timeCase} disabled={versionChanged} onChange={event => selectTimeCase(event.target.value)}><option value="live">正常上报</option><option value="partial">部分缺数 · 正常值</option><option value="old_normal">正常值已过期</option><option value="old_snapshot">重连旧快照 · 告警保留</option><option value="one_key">单键更新 · 其他键过期</option><option value="missing">无可用观测</option></select><button type="button" onClick={() => setClientOffset(offset => offset ? 0 : 300000)}>{clientOffset ? "恢复电脑时间" : "模拟电脑快5分钟"}</button><button type="button" disabled={versionChanged} onClick={onSimulatePublish}>模拟发布新版本</button><button type="button" onClick={onExpire}>模拟登录过期</button></div></>}<div className="runtime-note">以各键的服务器观测时间判龄；重连不重置旧值年龄。{clientOffset ? "电脑时间已模拟快5分钟，新鲜度不受影响。" : "连接正常不代表资料完整或新鲜。"}</div>
     {analysisAlarm && <DiagnosisDrawer alarm={analysisAlarm} status={analysisStatus} stale={(analysisAlarm.kind === "fault" ? stateFreshness : freshness) === "stale"} resolved={!activeAlarms.some((item) => item.id === analysisAlarm.id)} onClose={closeAnalysis} onRetry={() => openAnalysis(analysisAlarm)} onSetStatus={setAnalysisVariant} />}
     {historyOpen && <HistoryDrawer status={historyStatus} onClose={closeHistory} onRetry={openHistory} onSetStatus={(nextStatus) => { window.clearTimeout(historyTimerRef.current); setHistoryStatus(nextStatus); }} />}
     </section></main>;
 }
 
-function TrendEditor({ pageSchema, setPageSchema, onPreview, onPublish, publishedVersion, onHelp }) {
+function TrendEditor({ pageSchema, setPageSchema, onPreview, onPublish, publishedVersion, onHelp, onLogout, onExpire }) {
   const canvasRef = useRef(null), pointerRef = useRef(null);
   const [selectedId, setSelectedId] = useState(pageSchema.components[0].id), [toast, setToast] = useState(""), [drawerOpen, setDrawerOpen] = useState(false), [savedAt, setSavedAt] = useState("已自动保存"), [contextMenu, setContextMenu] = useState(null), [lastDeleted, setLastDeleted] = useState(null);
   const selected = pageSchema.components.find((node) => node.id === selectedId) ?? pageSchema.components[0];
@@ -931,7 +936,7 @@ function TrendEditor({ pageSchema, setPageSchema, onPreview, onPublish, publishe
     { id: "example-fault", kind: "fault", title: "设备故障", deviceName: "1号冷却泵", detail: "设备运行状态", valueText: "状态码 2", thresholdText: "检测到设备故障" },
     { id: "example-threshold", kind: "threshold", title: "出口温度超过告警阈值", deviceName: "1号冷却泵", detail: "pump1.outlet_temp", valueText: "83.0 °C", thresholdText: "阈值 ≥ 80.0 °C" },
   ];
-  return <main className="app" data-screen-label="活动告警列表编辑器"><header className="topbar"><div className="topbar-left"><div className="brand"><span className="brand-mark"></span><span className="brand-name">工业智控平台</span></div><div className="page-name">监控画面编辑器</div><div className="save-state"><span className="save-dot"></span>{savedAt}</div>{publishedVersion > 0 && <div className="published-state">已发布 v{publishedVersion}</div>}</div><div className="topbar-actions"><button className="btn btn-ghost" type="button" data-help-entry aria-controls="product-help" onClick={onHelp}><span className="button-content"><Icon name="info" />使用帮助</span></button><button className="btn btn-ghost" type="button" onClick={() => setDrawerOpen(true)}><span className="button-content"><Icon name="info" />设计说明</span></button><button className="btn btn-secondary" type="button" onClick={onPreview}><span className="button-content"><Icon name="play" />预览运行态</span></button><button className="btn btn-publish" type="button" onClick={publish}><span className="button-content"><Icon name="save" />发布版本</span></button><button className="btn btn-primary" type="button" onClick={() => { setSavedAt("已保存"); showToast("草稿已保存"); }}><span className="button-content"><Icon name="save" />保存草稿</span></button></div></header><div className="workspace"><TrendPalette addText={addText} addTrend={addTrend} addDeviceState={addDeviceState} addAlarmList={addAlarmList} showToast={showToast} /><section className="canvas-shell" ref={canvasRef} aria-label="编辑画布"><div className="canvas-tools"><button className="tool-button active" type="button" aria-label="选择"><Icon name="cursor" /></button><button className="tool-button" type="button" aria-label="撤销"><Icon name="undo" /></button><button className="tool-button" type="button" aria-label="重做"><Icon name="redo" /></button></div>{pageSchema.components.map((node) => <div key={node.id} className={`component-frame ${node.type === "metric-card" ? "metric-frame" : node.type === "device-state" ? "device-frame" : node.type === "alarm-list" ? "alarm-frame" : node.type === "text-block" ? "text-frame" : "trend-frame"} ${selectedId === node.id ? "selected" : ""}`} style={{ left: node.position.x, top: node.position.y, width: node.size.width, height: node.size.height }} onClick={() => setSelectedId(node.id)} onPointerMove={movePointer} onPointerUp={endPointer} onPointerCancel={endPointer}>{node.type === "text-block" ? <TextBlock node={node} onPointerDown={(event) => startPointer(event, node, "drag")} /> : node.type === "metric-card" ? <MetricCard schema={node} draggable onPointerDown={(event) => startPointer(event, node, "drag")} /> : node.type === "device-state" ? <DeviceStateCard node={node} onPointerDown={(event) => startPointer(event, node, "drag")} /> : node.type === "alarm-list" ? <AlarmList node={node} alarms={previewAlarms} example onPointerDown={(event) => startPointer(event, node, "drag")} /> : <TrendChart node={node} samples={previewSamples} now={Date.now()} onPointerDown={(event) => startPointer(event, node, "drag")} />}{selectedId === node.id && <><span className="resize-handle tl" onPointerDown={(event) => startPointer(event, node, "resize", "tl")}></span><span className="resize-handle tr" onPointerDown={(event) => startPointer(event, node, "resize", "tr")}></span><span className="resize-handle bl" onPointerDown={(event) => startPointer(event, node, "resize", "bl")}></span><span className="resize-handle tm" onPointerDown={(event) => startPointer(event, node, "resize", "t")}></span><span className="resize-handle bm" onPointerDown={(event) => startPointer(event, node, "resize", "b")}></span><span className="resize-handle br" onPointerDown={(event) => startPointer(event, node, "resize", "br")}></span></>}</div>)}</section><TrendInspector node={selected} updateProp={updateProp} copySchema={copySchema} schemaText={schemaText} /><footer className="statusbar"><div className="status-group"><span className="status-item">画布 <strong>1440 × 900</strong></span><span className="status-item">组件 <strong>{pageSchema.components.length}</strong></span></div><div className="status-group"><span className="status-item">选中 <strong>{selected.type}</strong></span><span className="status-item">位置 <strong>X {selected.position.x} · Y {selected.position.y}</strong></span><span className="status-item">缩放 <strong>100%</strong></span></div></footer></div><div className={`toast ${toast ? "visible" : ""}`} role="status"><span className="toast-check">✓</span>{toast}</div>{drawerOpen && <TrendDesignDrawer onClose={() => setDrawerOpen(false)} />}</main>;
+  return <main className="app" data-screen-label="活动告警列表编辑器"><header className="topbar"><div className="topbar-left"><div className="brand"><span className="brand-mark"></span><span className="brand-name">工业智控平台</span></div><div className="page-name">监控画面编辑器</div><div className="save-state"><span className="save-dot"></span>{savedAt}</div>{publishedVersion > 0 && <div className="published-state">已发布 v{publishedVersion}</div>}</div><div className="topbar-actions"><button className="btn btn-ghost" type="button" data-help-entry aria-controls="product-help" onClick={onHelp}><span className="button-content"><Icon name="info" />使用帮助</span></button><button className="btn btn-ghost" type="button" onClick={() => setDrawerOpen(true)}><span className="button-content"><Icon name="info" />设计说明</span></button><button className="btn btn-secondary" type="button" onClick={onPreview}><span className="button-content"><Icon name="play" />预览运行态</span></button><button className="btn btn-publish" type="button" onClick={publish}><span className="button-content"><Icon name="save" />发布版本</span></button><button className="btn btn-primary" type="button" onClick={() => { setSavedAt("已保存"); showToast("草稿已保存"); }}><span className="button-content"><Icon name="save" />保存草稿</span></button><AccountActions onLogout={onLogout} onExpire={onExpire} /></div></header><div className="workspace"><TrendPalette addText={addText} addTrend={addTrend} addDeviceState={addDeviceState} addAlarmList={addAlarmList} showToast={showToast} /><section className="canvas-shell" ref={canvasRef} aria-label="编辑画布"><div className="canvas-tools"><button className="tool-button active" type="button" aria-label="选择"><Icon name="cursor" /></button><button className="tool-button" type="button" aria-label="撤销"><Icon name="undo" /></button><button className="tool-button" type="button" aria-label="重做"><Icon name="redo" /></button></div>{pageSchema.components.map((node) => <div key={node.id} className={`component-frame ${node.type === "metric-card" ? "metric-frame" : node.type === "device-state" ? "device-frame" : node.type === "alarm-list" ? "alarm-frame" : node.type === "text-block" ? "text-frame" : "trend-frame"} ${selectedId === node.id ? "selected" : ""}`} style={{ left: node.position.x, top: node.position.y, width: node.size.width, height: node.size.height }} onClick={() => setSelectedId(node.id)} onPointerMove={movePointer} onPointerUp={endPointer} onPointerCancel={endPointer}>{node.type === "text-block" ? <TextBlock node={node} onPointerDown={(event) => startPointer(event, node, "drag")} /> : node.type === "metric-card" ? <MetricCard schema={node} draggable onPointerDown={(event) => startPointer(event, node, "drag")} /> : node.type === "device-state" ? <DeviceStateCard node={node} onPointerDown={(event) => startPointer(event, node, "drag")} /> : node.type === "alarm-list" ? <AlarmList node={node} alarms={previewAlarms} example onPointerDown={(event) => startPointer(event, node, "drag")} /> : <TrendChart node={node} samples={previewSamples} now={Date.now()} onPointerDown={(event) => startPointer(event, node, "drag")} />}{selectedId === node.id && <><span className="resize-handle tl" onPointerDown={(event) => startPointer(event, node, "resize", "tl")}></span><span className="resize-handle tr" onPointerDown={(event) => startPointer(event, node, "resize", "tr")}></span><span className="resize-handle bl" onPointerDown={(event) => startPointer(event, node, "resize", "bl")}></span><span className="resize-handle tm" onPointerDown={(event) => startPointer(event, node, "resize", "t")}></span><span className="resize-handle bm" onPointerDown={(event) => startPointer(event, node, "resize", "b")}></span><span className="resize-handle br" onPointerDown={(event) => startPointer(event, node, "resize", "br")}></span></>}</div>)}</section><TrendInspector node={selected} updateProp={updateProp} copySchema={copySchema} schemaText={schemaText} /><footer className="statusbar"><div className="status-group"><span className="status-item">画布 <strong>1440 × 900</strong></span><span className="status-item">组件 <strong>{pageSchema.components.length}</strong></span></div><div className="status-group"><span className="status-item">选中 <strong>{selected.type}</strong></span><span className="status-item">位置 <strong>X {selected.position.x} · Y {selected.position.y}</strong></span><span className="status-item">缩放 <strong>100%</strong></span></div></footer></div><div className={`toast ${toast ? "visible" : ""}`} role="status"><span className="toast-check">✓</span>{toast}</div>{drawerOpen && <TrendDesignDrawer onClose={() => setDrawerOpen(false)} />}</main>;
 }
 
 function ContextMenuLayer({ pageSchema, setPageSchema }) {
@@ -1049,13 +1054,13 @@ function mockHelpHistory(version, pageId, empty = false) {
   return { version, pageId, total: records.length, shown: Math.min(20, records.length), records, cutoff: "2026-10-02 14:30" };
 }
 
-function HelpHistoryResult({ history, currentVersion, pending, onMore, onRefresh }) {
+function HelpHistoryResult({ history, currentVersion, pending, blocked = false, onMore, onRefresh }) {
   const changed = history.version !== currentVersion;
   return <section className="help-history-result" aria-label="历史告警查询结果">
     <div className="help-history-heading"><strong>已恢复的历史告警</strong><span>v{history.version} · {history.pageId}</span></div>
     <p className="help-history-window">最近 24 小时内 · 本例实际范围：10-02 08:00 — 14:30<br />受当前发布版本时间限制；截止时间固定。</p>
     <p className="help-history-demo-note">模拟案例 · 假设本版本发布于 08:00，以下观测 ID 不是真实数据库记录。</p>
-    {changed && <div className="help-history-notice" role="status"><strong>发布版本已变化</strong><p>当前为 v{currentVersion}。以下旧查询仅供查看，不能继续旧分页。</p><button type="button" disabled={pending} onClick={onRefresh}>重新查询当前版本</button></div>}
+    {changed && <div className="help-history-notice" role="status"><strong>发布版本已变化</strong><p>当前为 v{currentVersion}。以下旧查询仅供查看，不能继续旧分页。</p><button type="button" disabled={pending || blocked} onClick={onRefresh}>重新查询当前版本</button></div>}
     {history.total === 0 ? <div className="help-history-empty"><strong>本次范围内无完整历史记录</strong><p>没有可证明触发并恢复的记录。不代表没有活动告警，尚未恢复或缺少触发依据的告警不在结果内。</p></div> : <>
       <div className="help-history-count"><strong>共 {history.total} 条</strong><span>已显示 {history.shown} 条 · 按触发时间倒序</span></div>
       <div className="help-history-records">{history.records.slice(0, history.shown).map((record, index) => <article className="help-alarm-record" key={record.id}>
@@ -1067,7 +1072,7 @@ function HelpHistoryResult({ history, currentVersion, pending, onMore, onRefresh
           <div><strong>恢复转折</strong><p>{record.recovery.before} → {record.recovery.after}</p><small>观测 #{record.recovery.beforeId}（{record.recovery.beforeTime}）→ #{record.recovery.afterId}（{record.recoveredAt}）</small></div>
         </div></details>
       </article>)}</div>
-      <div className="help-history-pagination"><span>已显示 {history.shown} / {history.total}</span>{history.shown < history.total ? <button type="button" disabled={pending || changed} onClick={onMore}>{pending ? "查询中…" : "继续查看"}</button> : <strong>本次结果已全部展示</strong>}</div>
+      <div className="help-history-pagination"><span>已显示 {history.shown} / {history.total}</span>{history.shown < history.total ? <button type="button" disabled={pending || blocked || changed} onClick={onMore}>{pending ? "查询中…" : "继续查看"}</button> : <strong>本次结果已全部展示</strong>}</div>
     </>}
     <p className="help-history-boundary">仅限本页当前发布版本的已恢复记录，不查询活动告警，不推断故障原因。</p>
   </section>;
@@ -1128,7 +1133,7 @@ function HelpActiveResult({ result, currentVersion, pending, onRefresh }) {
   </section>;
 }
 
-function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion }) {
+function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion, runtime = false, blocked = false, latestVersion, mismatchNotice, onVersionMismatch, onReload }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
@@ -1137,9 +1142,21 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
   const [expired, setExpired] = useState(false);
   const [historyExample, setHistoryExample] = useState("records");
   const [activeExample, setActiveExample] = useState("records");
+  const blockedRef = useRef(blocked), mismatchedReply = useRef(false);
+  blockedRef.current = blocked;
   const lastKind = useRef("guide"), scrollToHistory = useRef(false);
   const timer = useRef(null), input = useRef(null), scroll = useRef(null), lastQuery = useRef("");
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => {
+    window.clearTimeout(timer.current);
+    setMessages([]); setDraft(""); setError(""); setPending(false); setExpired(false);
+    setSimulateFailure(false); mismatchedReply.current = false; lastQuery.current = "";
+  }, [pageId, publishedVersion]);
+  useEffect(() => {
+    if (!blocked) return;
+    window.clearTimeout(timer.current); setPending(false); setError("");
+    setSimulateFailure(false); mismatchedReply.current = false;
+  }, [blocked]);
   useEffect(() => {
     if (!open) return undefined;
     input.current?.focus();
@@ -1157,7 +1174,7 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
   }, [messages, pending, error, expired, open]);
   const ask = (question, retry = false) => {
     const query = question.trim();
-    if (!query || pending || expired) return;
+    if (!query || pending || expired || blockedRef.current) return;
     const fail = !retry && simulateFailure;
     const historyQuery = /历史|已恢复|告警记录/.test(query);
     const activeQuery = !historyQuery && /活动告警|当前.*告警/.test(query);
@@ -1171,7 +1188,9 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
       setDraft("");
     }
     timer.current = window.setTimeout(() => {
+      if (blockedRef.current) return;
       setPending(false);
+      if (runtime && mismatchedReply.current) { mismatchedReply.current = false; onVersionMismatch(); return; }
       if (historyQuery && publishedVersion === 0) setMessages((current) => [...current, { role: "assistant", text: "当前页面尚未发布，不能查询发布版本内的历史告警。请先手动点击顶部“发布版本”，确认发布成功后再查询。" }]);
       else if (fail || (historyQuery && historyExample === "error" && !retry) || (activeQuery && activeExample === "error" && !retry)) setError(historyQuery || activeQuery ? "告警查询未成功，本次没有获得新资料，不能据此判断有没有告警。可重试同一个问题。" : "暂时无法连接问答服务，本次未生成回答。请重试，不需要重新输入问题。");
       else if (activeQuery) {
@@ -1183,17 +1202,19 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
         setMessages((current) => [...current, { role: "assistant", text: "查询范围已限定为当前页面及发布版本。以下为固定模拟结果：", history: mockHelpHistory(publishedVersion, pageId, historyExample === "empty") }]);
       }
       else setMessages((current) => [...current, { role: "assistant", ...helpExample(query, current) }]);
-    }, 900);
+    }, runtime ? 2400 : 900);
   };
   const close = () => { onClose(); document.querySelector('[data-help-entry]')?.focus(); };
   const moreHistory = (index) => {
-    if (pending || expired) return;
+    if (pending || expired || blockedRef.current) return;
     const history = messages[index].history;
     if (history.version !== publishedVersion || history.shown >= history.total) return;
     setPending(true);
     lastKind.current = "history";
     timer.current = window.setTimeout(() => {
+      if (blockedRef.current) return;
       setPending(false);
+      if (runtime && mismatchedReply.current) { mismatchedReply.current = false; onVersionMismatch(); return; }
       setMessages((current) => current.map((message, i) => i === index ? { ...message, history: { ...message.history, shown: Math.min(history.shown + 20, history.total) } } : message));
     }, 650);
   };
@@ -1203,18 +1224,21 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
     setSimulateFailure(false);
   };
   const refreshActive = (index) => {
-    if (pending || expired) return;
+    if (pending || expired || blockedRef.current) return;
     setPending(true); setError(""); lastKind.current = "active";
     const fail = simulateFailure || activeExample === "error";
     setSimulateFailure(false);
     lastQuery.current = "查询当前页面活动告警";
     timer.current = window.setTimeout(() => {
+      if (blockedRef.current) return;
       setPending(false);
+      if (runtime && mismatchedReply.current) { mismatchedReply.current = false; onVersionMismatch(); return; }
       if (fail) { setError("活动告警查询失败，本次没有获得新观测。旧快照仅供核对，不能当作当前结果；可重试。"); return; }
       setMessages((current) => current.map((message, i) => i === index ? { ...message, active: mockHelpActive(publishedVersion, pageId, activeExample === "error" ? "records" : activeExample) } : message));
     }, 650);
   };
   const startNewSession = () => {
+    if (blockedRef.current) return;
     setMessages([]);
     setDraft("");
     setError("");
@@ -1224,43 +1248,133 @@ function ProductHelpPanel({ open, onClose, pageId, pageName, publishedVersion })
   };
   if (!open) return null;
   return (
-    <aside id="product-help" className="help-panel" aria-labelledby="help-title" data-help-panel data-screen-label="产品使用帮助">
+    <aside id="product-help" className={`help-panel ${blocked ? "help-panel--blocked" : ""}`} aria-labelledby="help-title" data-help-panel data-screen-label="产品使用帮助">
       <header className="help-header">
-        <div className="help-heading"><Icon name="info" size={19} /><div><h2 id="help-title">使用帮助</h2><p>操作指南 · 告警只读查询</p></div></div>
+        <div className="help-heading"><Icon name="info" size={19} /><div><h2 id="help-title">使用帮助</h2><p>{runtime ? "运行态 · 操作指南与告警只读查询" : "操作指南 · 告警只读查询"}</p></div></div>
         <button className="help-close" type="button" aria-label="关闭使用帮助" onClick={close}><Icon name="close" size={18} /></button>
       </header>
       <div className="help-scope"><Icon name="lock" size={13} /><span>只读本页告警 · 不代为操作，不推断根因</span></div>
-      <div className="help-page-context"><span>{pageName} <small>({pageId})</small></span><strong>{publishedVersion ? `当前发布 v${publishedVersion}` : "尚未发布"}</strong></div>
+      <div className="help-page-context"><span>{pageName} <small>({pageId})</small></span><strong>{publishedVersion ? `${runtime ? "当前画面" : "当前发布"} v${publishedVersion}` : "尚未发布"}</strong></div>
+      {blocked && <div className="help-version-notice" role="status"><strong>当前 v{publishedVersion} 对话仅供查看</strong><p>{mismatchNotice ? "查询返回的版本与当前画面不符，已拒绝显示该结果。" : `已有新发布版本 v${latestVersion}。`}已暂停提问、重新查询和历史翻页；请刷新到最新发布版本后开始新会话。</p><button type="button" onClick={onReload}>刷新运行画面</button></div>}
       <div className="help-conversation" ref={scroll} role="log" aria-label="帮助对话" aria-live="polite" aria-busy={pending}>
-        {messages.length === 0 && !expired && <section className="help-welcome"><div className="help-welcome-icon"><Icon name="info" size={26} /></div><h3>配置页面时遇到问题？</h3><p>问我如何配置和发布页面。也可以查询本页的活动告警或已恢复历史，核对对应观测依据。</p><div className="help-suggestions"><button type="button" onClick={() => ask("怎样发布当前页面？")}>怎样发布当前页面？<span>↗</span></button><button type="button" onClick={() => ask("出口温度的数据键怎么设置？")}>出口温度的数据键怎么设置？<span>↗</span></button><button type="button" onClick={() => ask("怎样添加文本标题？")}>怎样添加文本标题？<span>↗</span></button><button type="button" onClick={() => ask("查询当前页面活动告警")}>查询当前页面活动告警<span>↗</span></button><button type="button" onClick={() => ask("查询当前页面最近24小时的历史告警")}>查询当前页面历史告警<span>↗</span></button></div></section>}
-        {messages.map((message, index) => <article className={`help-message help-message--${message.role}`} key={index}><span className="help-speaker">{message.role === "user" ? "你" : "使用帮助"}</span><p>{message.text}</p>{message.active && <HelpActiveResult result={message.active} currentVersion={publishedVersion} pending={pending || expired} onRefresh={() => refreshActive(index)} />}{message.history && <HelpHistoryResult history={message.history} currentVersion={publishedVersion} pending={pending || expired} onMore={() => moreHistory(index)} onRefresh={() => ask("查询当前页面历史告警")} />}{message.sources && <div className="help-sources"><span className="help-source-label">操作指南依据</span>{message.sources.map((source) => <details key={source.title}><summary><Icon name="text" size={13} /><span>{source.title}</span><span className="help-source-expand">展开原文</span></summary><div className="help-source-content"><small>docs/product-guide.md · {source.title}</small><p>{source.excerpt}</p></div></details>)}</div>}</article>)}
+        {messages.length === 0 && !expired && !blocked && <section className="help-welcome"><div className="help-welcome-icon"><Icon name="info" size={26} /></div><h3>{runtime ? "查看页面时遇到问题？" : "配置页面时遇到问题？"}</h3><p>可以问产品用法，或查询当前页面的活动告警和已恢复历史，核对对应观测依据。</p><div className="help-suggestions"><button type="button" onClick={() => ask("怎样发布当前页面？")}>怎样发布当前页面？<span>↗</span></button><button type="button" onClick={() => ask("出口温度的数据键怎么设置？")}>出口温度的数据键怎么设置？<span>↗</span></button><button type="button" onClick={() => ask("怎样添加文本标题？")}>怎样添加文本标题？<span>↗</span></button><button type="button" onClick={() => ask("查询当前页面活动告警")}>查询当前页面活动告警<span>↗</span></button><button type="button" onClick={() => ask("查询当前页面最近24小时的历史告警")}>查询当前页面历史告警<span>↗</span></button></div></section>}
+        {messages.map((message, index) => <article className={`help-message help-message--${message.role}`} key={index}><span className="help-speaker">{message.role === "user" ? "你" : "使用帮助"}</span><p>{message.text}</p>{message.active && <HelpActiveResult result={message.active} currentVersion={publishedVersion} pending={pending || expired || blocked} onRefresh={() => refreshActive(index)} />}{message.history && <HelpHistoryResult history={message.history} currentVersion={publishedVersion} pending={pending || expired} blocked={blocked} onMore={() => moreHistory(index)} onRefresh={() => ask("查询当前页面历史告警")} />}{message.sources && <div className="help-sources"><span className="help-source-label">操作指南依据</span>{message.sources.map((source) => <details key={source.title}><summary><Icon name="text" size={13} /><span>{source.title}</span><span className="help-source-expand">展开原文</span></summary><div className="help-source-content"><small>docs/product-guide.md · {source.title}</small><p>{source.excerpt}</p></div></details>)}</div>}</article>)}
         {pending && <div className="help-loading" role="status"><span className="diagnosis-spinner"></span>{lastKind.current === "history" ? "正在查询历史告警…" : lastKind.current === "active" ? "正在读取服务器最新观测…" : "正在查阅操作指南…"}</div>}
-        {error && <div className="help-error" role="alert"><strong>{lastKind.current !== "guide" ? "告警查询失败" : "本次问答失败"}</strong><p>{error}</p><button type="button" onClick={() => ask(lastQuery.current, true)}>重试这条问题</button></div>}
-        {expired && <div className="help-error help-expired" role="alert"><strong>会话已过期</strong><p>闲置超过 15 分钟或服务重启，之前的上下文已失效。旧对话仅供查看，不能继续追问。</p><p>开始新会话后会清空当前对话，请重新说明问题背景。</p><button type="button" onClick={startNewSession}>开始新会话</button></div>}
+        {error && <div className="help-error" role="alert"><strong>{lastKind.current !== "guide" ? "告警查询失败" : "本次问答失败"}</strong><p>{error}</p><button type="button" disabled={blocked} onClick={() => ask(lastQuery.current, true)}>重试这条问题</button></div>}
+        {expired && <div className="help-error help-expired" role="alert"><strong>会话已过期</strong><p>闲置超过 15 分钟或服务重启，之前的上下文已失效。旧对话仅供查看，不能继续追问。</p><p>开始新会话后会清空当前对话，请重新说明问题背景。</p><button type="button" disabled={blocked} onClick={startNewSession}>开始新会话</button></div>}
       </div>
       <form className="help-composer" onSubmit={(event) => { event.preventDefault(); ask(draft); }}>
         <label className="help-input-label" htmlFor="help-question">你的问题</label>
-        <textarea id="help-question" ref={input} value={draft} disabled={expired} maxLength={1000} placeholder={expired ? "请先开始新会话，再重新说明问题背景" : "例如：保存草稿后，运行态为什么还是旧内容？"} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(draft); } }} />
-        <div className="help-composer-actions"><span>Enter 发送 · Shift+Enter 换行</span><button type="submit" disabled={expired || pending || !draft.trim()}>{pending ? "查阅中" : "发送"}</button></div>
-        <p className="help-session-note">关闭后保留 · 闲置 15 分钟过期 · 刷新后清空</p>
+        <textarea id="help-question" ref={input} value={draft} disabled={expired || blocked} maxLength={1000} placeholder={blocked ? "当前版本已变化，请先刷新运行画面" : expired ? "请先开始新会话，再重新说明问题背景" : "例如：保存草稿后，运行态为什么还是旧内容？"} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(draft); } }} />
+        <div className="help-composer-actions"><span>Enter 发送 · Shift+Enter 换行</span><button type="submit" disabled={blocked || expired || pending || !draft.trim()}>{pending ? "查阅中" : "发送"}</button></div>
+        <p className="help-session-note">同页同版本跨入口保留 · 关闭后保留 · 刷新后清空</p>
       </form>
-      <div className="help-demo"><span>原型 · 未连接模型</span><div className="help-demo-actions"><button type="button" disabled={pending || expired} aria-pressed={simulateFailure} onClick={() => setSimulateFailure(!simulateFailure)}>{simulateFailure ? "下次将失败" : "模拟失败"}</button><button type="button" disabled={pending || expired} onClick={expire}>模拟过期</button></div><label className="help-history-demo">历史案例<select value={historyExample} disabled={pending} onChange={(event) => setHistoryExample(event.target.value)} aria-label="历史告警原型案例"><option value="records">21条记录 · 20+1分页</option><option value="empty">无完整记录</option><option value="error">查询失败</option></select></label><label className="help-history-demo">活动案例<select value={activeExample} disabled={pending} onChange={(event) => setActiveExample(event.target.value)} aria-label="活动告警原型案例"><option value="records">新鲜观测 · 2条告警</option><option value="stale">观测过期 · 保留告警</option><option value="partial">部分数据缺失</option><option value="missing">没有可用观测</option><option value="normal">观测未触发条件</option><option value="unconfigured">未配置告警条件</option><option value="limit">23条 · 仅显示20条</option><option value="error">查询失败</option></select></label></div>
+      <div className="help-demo"><span>原型 · 未连接模型</span><div className="help-demo-actions">{runtime && <button type="button" disabled={blocked || expired} onClick={() => { mismatchedReply.current = true; if (!pending) ask("查询当前页面活动告警"); }}>模拟返回新版资料</button>}<button type="button" disabled={blocked || pending || expired} aria-pressed={simulateFailure} onClick={() => setSimulateFailure(!simulateFailure)}>{simulateFailure ? "下次将失败" : "模拟失败"}</button><button type="button" disabled={blocked || pending || expired} onClick={expire}>模拟过期</button></div><label className="help-history-demo">历史案例<select value={historyExample} disabled={pending || blocked} onChange={(event) => setHistoryExample(event.target.value)} aria-label="历史告警原型案例"><option value="records">21条记录 · 20+1分页</option><option value="empty">无完整记录</option><option value="error">查询失败</option></select></label><label className="help-history-demo">活动案例<select value={activeExample} disabled={pending || blocked} onChange={(event) => setActiveExample(event.target.value)} aria-label="活动告警原型案例"><option value="records">新鲜观测 · 2条告警</option><option value="stale">观测过期 · 保留告警</option><option value="partial">部分数据缺失</option><option value="missing">没有可用观测</option><option value="normal">观测未触发条件</option><option value="unconfigured">未配置告警条件</option><option value="limit">23条 · 仅显示20条</option><option value="error">查询失败</option></select></label></div>
     </aside>
   );
 }
 
+// 登录原型：只模拟交互，不存储密码或建立真实会话。
+function LoginScreen({ onLogin, expired, runtimeRequired }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [visible, setVisible] = useState(false);
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState(false);
+  const timer = useRef(null);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const submit = (event) => {
+    event.preventDefault();
+    if (!username.trim() || !password) { setError("请输入账号和密码。"); return; }
+    setError(""); setPending(true);
+    timer.current = window.setTimeout(() => {
+      setPending(false);
+      if (failure) { setError("登录服务暂时不可用，请稍后重试。"); return; }
+      if (username.trim() !== "admin" || password !== "Industrial123!") { setError("账号或密码错误，请重新输入。"); return; }
+      setPassword(""); onLogin();
+    }, 700);
+  };
+  return <main className="login-screen" data-screen-label="账号密码登录">
+    <section className="login-brand-panel">
+      <div className="brand"><span className="brand-mark"></span><span className="brand-name">工业智控平台</span></div>
+      <div className="login-intro"><span className="login-eyebrow">工业监控与巡检</span><h1>每一项观测，<br />都有据可查。</h1><p>配置监控画面，查看设备状态，<br />从实时告警追溯观测证据。</p><div className="login-rule"></div><span className="login-caption">监控画面 · 设备状态 · 告警证据</span></div>
+      <span className="login-prototype-label">交互原型 · 未连接认证服务</span>
+    </section>
+    <section className="login-form-panel">
+      <form className="login-form" onSubmit={submit} noValidate>
+        <div className="login-heading"><span className="login-eyebrow">工作台</span><h2>登录平台</h2><p>使用你的账号进入工业监控工作台。</p></div>
+        {runtimeRequired && <div className="login-notice" role="status">运行态需要登录。登录成功后，将进入原运行页面。</div>}
+        {expired && <div className="login-notice" role="status">登录已过期，请重新登录后继续。</div>}
+        <label htmlFor="login-username">账号</label>
+        <input id="login-username" autoComplete="username" autoFocus value={username} disabled={pending} placeholder="请输入账号" aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} onChange={(event) => { setUsername(event.target.value); setError(""); }} />
+        <label htmlFor="login-password">密码</label>
+        <div className="login-password"><input id="login-password" type={visible ? "text" : "password"} autoComplete="current-password" value={password} disabled={pending} placeholder="请输入密码" aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} onChange={(event) => { setPassword(event.target.value); setError(""); }} /><button type="button" disabled={pending} aria-label={visible ? "隐藏密码" : "显示密码"} aria-pressed={visible} onClick={() => setVisible(!visible)}><Icon name={visible ? "eyeOff" : "eye"} size={18} /></button></div>
+        <div className="login-error-space">{error && <p id="login-error" className="login-error" role="alert">{error}</p>}</div>
+        <button className="btn btn-primary login-submit" type="submit" disabled={pending}>{pending ? "正在登录…" : "登录"}</button>
+        <p className="login-account-note">账号由管理员分配。如需帮助，请联系管理员。</p>
+        <div className="login-demo"><strong>原型演示账号</strong><code>admin / Industrial123!</code><label><input type="checkbox" checked={failure} disabled={pending} onChange={(event) => setFailure(event.target.checked)} />模拟登录服务不可用</label></div>
+      </form>
+    </section>
+  </main>;
+}
+
+function AccountActions({ onLogout, onExpire }) {
+  return <div className="account-actions"><span className="account-name">admin</span><button className="btn btn-ghost" type="button" onClick={onLogout}>退出登录</button><button className="account-demo" type="button" onClick={onExpire}>原型 · 模拟过期</button></div>;
+}
+
 function TrendPrototypeApp() {
-  const [mode, setMode] = useState("editor"), [published, setPublished] = useState(null);
+  const directRuntime = new URLSearchParams(window.location.search).get("screen") === "runtime";
+  const [signedIn, setSignedIn] = useState(false);
+  const [expired, setExpired] = useState(false);
+  const [mode, setMode] = useState(directRuntime ? "runtime" : "editor"), [published, setPublished] = useState(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(true);
+  const [loginTarget, setLoginTarget] = useState(directRuntime ? "runtime" : "editor"), [helpEpoch, setHelpEpoch] = useState(0);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [runtimePublished, setRuntimePublished] = useState(null), [mismatchNotice, setMismatchNotice] = useState(false);
   const [pageSchema, setPageSchema] = useState({ version: "1.0.0", id: "demo", name: "冷却系统监控", canvas: { width: 1440, height: 900, background: "#0e1d2b" }, components: [
     { id: "metric-pump-01", type: "metric-card", position: { x: 275, y: 130 }, size: { width: 300, height: 214 }, props: { deviceName: "1号冷却泵", title: "出口温度", dataKey: "pump1.outlet_temp", unit: "°C", precision: 1, alarmThreshold: 80 } },
     { id: "device-state-pump-01", type: "device-state", position: { x: 610, y: 130 }, size: { width: 300, height: 180 }, props: { deviceName: "1号冷却泵", title: "设备运行状态", dataKey: "pump1.operating_state" } },
     { id: "trend-pump-01", type: "trend-chart", position: { x: 80, y: 370 }, size: { width: 720, height: 300 }, props: { title: "1号冷却泵出口温度趋势", dataKey: "pump1.outlet_temp", unit: "°C", precision: 1, alarmThreshold: 80 } },
     { id: "alarm-list-main", type: "alarm-list", position: { x: 830, y: 370 }, size: { width: 520, height: 300 }, props: { title: "活动告警" } },
   ] });
-  useEffect(() => { const handler = (event) => { if (event.key === "Escape" && mode === "runtime" && !document.querySelector("[data-diagnosis-drawer], [data-history-drawer]")) setMode("editor"); }; window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler); }, [mode]);
+  // 直达运行态使用固定已发布示例；登录仍是进入页面的前提。
+  useEffect(() => {
+    if (!directRuntime) return;
+    const example = { version: 1, schema: JSON.parse(JSON.stringify(pageSchema)) };
+    setPublished(example); setRuntimePublished(example);
+  }, []);
+  useEffect(() => { const handler = (event) => { if (event.key === "Escape" && mode === "runtime" && !document.querySelector("[data-diagnosis-drawer], [data-history-drawer], [data-help-panel]")) setMode("editor"); }; window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler); }, [mode]);
   const publish = () => { const version = (published?.version ?? 0) + 1; setPublished({ version, schema: JSON.parse(JSON.stringify(pageSchema)) }); return version; };
-  return <>{mode === "runtime" ? <TrendRuntime published={published} onBack={() => setMode("editor")} onSimulatePublish={publish} /> : <TrendEditorV5 pageSchema={pageSchema} setPageSchema={setPageSchema} onPreview={() => setMode("runtime")} onPublish={publish} publishedVersion={published?.version ?? 0} onHelp={() => setHelpOpen(!helpOpen)} />}<ProductHelpPanel pageId={pageSchema.id} pageName={pageSchema.name} publishedVersion={published?.version ?? 0} open={helpOpen && mode === "editor"} onClose={() => setHelpOpen(false)} /></>;
+  const openHelp = () => setHelpOpen(!helpOpen);
+  const logout = (sessionExpired = false) => {
+    setHelpOpen(false); setHelpEpoch(epoch => epoch + 1); setExpired(sessionExpired);
+    setSignedIn(false); setLoginTarget(mode); setLoginOpen(true);
+  };
+  const enterEditor = () => setMode("editor");
+  const enterRuntime = () => { setRuntimePublished(published); setMismatchNotice(false); setMode("runtime"); };
+  const current = mode === "runtime" ? runtimePublished : published;
+  const blocked = mode === "runtime" && !!runtimePublished && !!published && runtimePublished.version !== published.version;
+  if (loginOpen || !signedIn) return <LoginScreen expired={expired} runtimeRequired={loginTarget === "runtime"} onLogin={() => {
+    setExpired(false); setSignedIn(true); setLoginOpen(false); setMode(loginTarget);
+    if (loginTarget === "runtime") setRuntimePublished(published);
+    setHelpOpen(false);
+  }} />;
+  return <>{mode === "runtime" ? <TrendRuntime published={published}
+    onViewChange={setRuntimePublished} refreshToken={refreshToken} onHelp={openHelp}
+    onBack={enterEditor} onSimulatePublish={() => { setMismatchNotice(false); publish(); }}
+    onExpire={() => logout(true)} />
+    : <TrendEditorV5 pageSchema={pageSchema} setPageSchema={setPageSchema} onPreview={enterRuntime}
+      onPublish={publish} publishedVersion={published?.version ?? 0} onHelp={openHelp}
+      onLogout={() => logout()} onExpire={() => logout(true)} />}
+    <ProductHelpPanel key={helpEpoch} pageId={current?.schema.id ?? pageSchema.id}
+      pageName={current?.schema.name ?? pageSchema.name} publishedVersion={current?.version ?? 0}
+      runtime={mode === "runtime"} blocked={blocked} latestVersion={published?.version} mismatchNotice={mismatchNotice}
+      onReload={() => { setMismatchNotice(false); setRefreshToken(token => token + 1); }}
+      onVersionMismatch={() => { setMismatchNotice(true); publish(); }} open={signedIn && helpOpen}
+      onClose={() => setHelpOpen(false)} /></>;
+
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<TrendPrototypeApp />);

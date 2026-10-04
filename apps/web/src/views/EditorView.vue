@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElDialog, ElInput, ElInputNumber, ElMessage } from "element-plus";
 import "element-plus/es/components/dialog/style/css";
@@ -10,6 +10,7 @@ import Moveable from "vue3-moveable";
 import { PageRenderer } from "@industrial/renderer-core";
 import { webComponentRegistry } from "@industrial/components-web";
 import { useEditorDocumentStore } from "@/stores/editorDocument";
+import AccountActions from "@/components/AccountActions.vue";
 import UiIcon from "@/components/UiIcon.vue";
 import { publishPage, loadPublishedPage } from "@/data/pageRepository";
 import { productHelp, bindHelpPage } from "@/data/productHelp";
@@ -63,6 +64,7 @@ function syncTarget(): void {
 }
 
 let pageLoadSequence = 0;
+onBeforeUnmount(() => { pageLoadSequence += 1; });
 watch(() => route.params.pageId, async () => {
   const sequence = ++pageLoadSequence;
   const pageId = String(route.params.pageId);
@@ -70,11 +72,10 @@ watch(() => route.params.pageId, async () => {
   try {
     await store.load(pageId);
     if (sequence !== pageLoadSequence) return;
-    bindHelpPage(pageId, store.schema.name);
     try {
       const published = await loadPublishedPage(pageId);
-      if (sequence === pageLoadSequence && productHelp.pageId === pageId) productHelp.pageVersion = Math.max(productHelp.pageVersion ?? 0, published?.version ?? 0);
-    } catch { /* 不把请求失败当作尚未发布，保留未知状态。 */ }
+      if (sequence === pageLoadSequence) bindHelpPage(pageId, store.schema.name, published?.version ?? 0);
+    } catch { if (sequence === pageLoadSequence) bindHelpPage(pageId, store.schema.name, null); }
     syncTarget();
   } catch (error) {
     if (sequence === pageLoadSequence) ElMessage.error(error instanceof Error ? error.message : "加载草稿失败");
@@ -137,7 +138,7 @@ async function publishCurrentDraft(): Promise<void> {
   try {
     if (!(await saveDraft(false))) return;
     const published = await publishPage(store.schema.id);
-    if (productHelp.pageId === published.pageId) productHelp.pageVersion = published.version;
+    if (productHelp.pageId === published.pageId) bindHelpPage(published.pageId, store.schema.name, published.version);
     ElMessage.success(`已发布 v${published.version}`);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "发布页面失败");
@@ -294,6 +295,7 @@ function onResizeEnd(): void {
         <button class="app-button app-button--primary" type="button" :disabled="loading" @click="saveDraft()">
           <UiIcon name="save" />保存草稿
         </button>
+        <AccountActions />
       </div>
     </header>
 

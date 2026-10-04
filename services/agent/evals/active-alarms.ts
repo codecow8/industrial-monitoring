@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createEvalLogin } from "./platform-login.ts";
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
 import { request } from "node:http";
@@ -30,6 +31,7 @@ async function jsonRequest<T>(port: number, path: string, method = "GET", body?:
   return new Promise((resolve, reject) => {
     const req = request({ hostname: "127.0.0.1", port, path, method, headers: {
       "Content-Type": "application/json", "X-Industrial-Help": "1",
+      ...(platformLogin ? { Cookie: platformLogin.cookie } : {}),
     } }, response => {
       let text = "";
       response.setEncoding("utf8");
@@ -46,6 +48,7 @@ async function jsonRequest<T>(port: number, path: string, method = "GET", body?:
   });
 }
 
+let platformLogin: Awaited<ReturnType<typeof createEvalLogin>> | undefined;
 const dispatcher = new EnvHttpProxyAgent();
 setGlobalDispatcher(dispatcher);
 const models = new Map<string, { provider: string; id: string }>();
@@ -63,6 +66,7 @@ let previousQueryId: string | undefined;
 let alarmFixture: Fixture | undefined;
 try {
   await jsonRequest(8000, "/api/health");
+  platformLogin = await createEvalLogin();
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   const address = server.address();
   assert.ok(address && typeof address === "object");
@@ -161,4 +165,5 @@ try {
 } finally {
   if (server.listening) await new Promise<void>(resolve => { server.close(() => resolve()); server.closeAllConnections(); });
   await dispatcher.close();
+  platformLogin?.dispose();
 }

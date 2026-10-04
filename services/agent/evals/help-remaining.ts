@@ -1,3 +1,4 @@
+import { createEvalLogin } from "./platform-login.ts";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { loadGuide } from "../src/guide.ts";
@@ -19,7 +20,7 @@ const cases = [
 const guide = await loadGuide(fileURLToPath(new URL("../../../docs/product-guide.md", import.meta.url)));
 async function post(path: string, body: unknown) {
   const response = await fetch(`http://127.0.0.1:8001/api/help${path}`, {
-    method: "POST", headers: { "Content-Type": "application/json", "X-Industrial-Help": "1" },
+    method: "POST", headers: { "Content-Type": "application/json", "X-Industrial-Help": "1", Cookie: platformLogin.cookie },
     body: JSON.stringify(body), signal: AbortSignal.timeout(75_000),
   });
   return { status: response.status, body: await response.json() };
@@ -28,6 +29,8 @@ async function post(path: string, body: unknown) {
 let failures = 0;
 const selected = process.argv.slice(2);
 if (selected.some((id) => !cases.some(([known]) => known === id))) throw new Error("指定了未定义的案例编号。");
+const platformLogin = await createEvalLogin();
+try {
 for (const [id, question] of cases.filter(([id]) => !selected.length || selected.includes(id))) {
   // 普通案例各用新会话，避免前一题的答案代替本题检索；Q7 已另行验证连续会话。
   const created = await post("/sessions", {});
@@ -46,3 +49,4 @@ for (const [id, question] of cases.filter(([id]) => !selected.length || selected
   console.log(JSON.stringify({ id, question, sourcesValid, answer: reply.answer, sources: reply.sources.map((source) => source.title) }));
 }
 process.exitCode = failures ? 1 : 0;
+} finally { platformLogin.dispose(); }

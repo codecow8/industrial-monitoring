@@ -6,6 +6,8 @@ import {
 } from "@industrial/schema";
 import type { ActiveAlarmView } from "@industrial/renderer-core";
 
+import { authFetch } from "./authHttp";
+
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 export type DiagnosisStatement = { text: string; sourceIds: string[] };
@@ -21,7 +23,7 @@ export type AlarmDiagnosis = {
 };
 
 export async function diagnoseAlarm(pageId: string, alarm: ActiveAlarmView): Promise<AlarmDiagnosis> {
-  const response = await fetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/alarm-diagnoses`, {
+  const response = await authFetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/alarm-diagnoses`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ kind: alarm.kind, dataKey: alarm.dataKey, threshold: alarm.threshold }),
@@ -63,7 +65,7 @@ export type AlarmHistoryPage = {
 export async function loadAlarmHistory(pageId: string, offset = 0, asOf?: string): Promise<AlarmHistoryPage> {
   const params = new URLSearchParams({ limit: "20", offset: String(offset) });
   if (asOf) params.set("asOf", asOf);
-  const response = await fetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/alarm-history?${params}`);
+  const response = await authFetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/alarm-history?${params}`);
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: string } | null;
     throw new Error(body?.detail ?? `加载历史告警失败（${response.status}）`);
@@ -97,7 +99,7 @@ function parsePublishedPage(value: unknown): PublishedPage {
 }
 
 export async function loadPageSchema(pageId: string): Promise<PageSchema> {
-  const response = await fetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/draft`);
+  const response = await authFetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/draft`);
   if (response.status === 204) return createSeedPageSchema(pageId);
   if (!response.ok) throw new Error(`加载草稿失败（${response.status}）`);
 
@@ -107,7 +109,7 @@ export async function loadPageSchema(pageId: string): Promise<PageSchema> {
 }
 
 export async function savePageSchema(schema: PageSchema): Promise<PageSchema> {
-  const response = await fetch(`${apiBase}/pages/${encodeURIComponent(schema.id)}/draft`, {
+  const response = await authFetch(`${apiBase}/pages/${encodeURIComponent(schema.id)}/draft`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(schema),
@@ -123,7 +125,7 @@ export async function savePageSchema(schema: PageSchema): Promise<PageSchema> {
 }
 
 export async function publishPage(pageId: string): Promise<PublishedPage> {
-  const response = await fetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/publish`, {
+  const response = await authFetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/publish`, {
     method: "POST",
   });
   if (!response.ok) throw new Error(`发布页面失败（${response.status}）`);
@@ -131,7 +133,7 @@ export async function publishPage(pageId: string): Promise<PublishedPage> {
 }
 
 export async function loadPublishedPage(pageId: string): Promise<PublishedPage | null> {
-  const response = await fetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/published`);
+  const response = await authFetch(`${apiBase}/pages/${encodeURIComponent(pageId)}/published`);
   if (response.status === 204) return null;
   if (!response.ok) throw new Error(`加载发布版本失败（${response.status}）`);
   return parsePublishedPage(await response.json());

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from .auth import allowed_origins, check_origin, current_user, router as auth_router
 from .database import get_session
 from .active import router as active_router
 from .diagnosis import router as diagnosis_router
@@ -24,15 +25,17 @@ from .telemetry import hub as telemetry_hub, router as telemetry_router
 app = FastAPI(title="Industrial Monitoring API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:4173", "http://127.0.0.1:5173"],
+    allow_origins=allowed_origins(),
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT"],
     allow_headers=["Content-Type"],
 )
+app.include_router(auth_router)
 app.include_router(telemetry_router)
-app.include_router(evidence_router)
-app.include_router(history_router)
-app.include_router(active_router)
-app.include_router(diagnosis_router)
+app.include_router(evidence_router, dependencies=[Depends(current_user)])
+app.include_router(history_router, dependencies=[Depends(current_user)])
+app.include_router(active_router, dependencies=[Depends(current_user)])
+app.include_router(diagnosis_router, dependencies=[Depends(current_user), Depends(check_origin)])
 
 
 @app.get("/api/health")
@@ -40,7 +43,7 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.put("/api/pages/{page_key}/draft")
+@app.put("/api/pages/{page_key}/draft", dependencies=[Depends(current_user), Depends(check_origin)])
 def put_draft(
     page_key: str,
     schema: dict[str, Any] = Body(...),
@@ -57,6 +60,7 @@ def put_draft(
 
 @app.get(
     "/api/pages/{page_key}/draft",
+    dependencies=[Depends(current_user)],
     response_model=None,
     responses={204: {"description": "No draft has been saved"}},
 )
@@ -70,7 +74,7 @@ def read_draft(
     return schema
 
 
-@app.post("/api/pages/{page_key}/publish", response_model=None)
+@app.post("/api/pages/{page_key}/publish", response_model=None, dependencies=[Depends(current_user), Depends(check_origin)])
 async def publish_page(
     page_key: str,
     session: Session = Depends(get_session),
@@ -84,6 +88,7 @@ async def publish_page(
 
 @app.get(
     "/api/pages/{page_key}/published",
+    dependencies=[Depends(current_user)],
     response_model=None,
     responses={204: {"description": "No version has been published"}},
 )
@@ -97,7 +102,7 @@ def read_published_page(
     return published
 
 
-@app.get("/api/pages/{page_key}/versions/{version}", response_model=None)
+@app.get("/api/pages/{page_key}/versions/{version}", response_model=None, dependencies=[Depends(current_user)])
 def read_page_version(
     page_key: str,
     version: int,

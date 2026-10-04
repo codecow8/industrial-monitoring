@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../auth-fixtures";
 import type { Page } from "@playwright/test";
 
 test.skip(process.env.LIVE_MODEL_EVAL !== "1", "显式设置 LIVE_MODEL_EVAL=1 才调用真实模型");

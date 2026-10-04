@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
-import { productHelp, retryHelp, sendHelp, startNewHelpSession, bindHelpPage, moreHelpHistory, queryHelpHistory, queryHelpActive, refreshHelpActive } from "../src/data/productHelp.ts";
+import { productHelp, retryHelp, sendHelp, startNewHelpSession, bindHelpPage, moreHelpHistory, queryHelpHistory, queryHelpActive, refreshHelpActive, pauseHelpVersion } from "../src/data/productHelp.ts";
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -217,4 +217,124 @@ test("活动无数据保留资料不足状态，拒绝错误页或伪装正常�
     assert.equal(productHelp.messages.length, 1);
     assert.ok(productHelp.error.includes("资料合同"));
   }
+});
+
+test("同页同版本跨入口复用会话，换版本重新绑定清空并创建新会话", async () => {
+  let created = 0;
+  globalThis.fetch = async (url, init) => String(url).endsWith("/sessions")
+    ? json({ sessionId: `session-${++created}` })
+    : json({ requestId: JSON.parse(init?.body as string).requestId, answer: "同页回答", sources: [] });
+  bindHelpPage("demo", "冷却系统", 1);
+  await sendHelp("编辑器问题");
+  bindHelpPage("demo", "冷却系统", 1, true);
+  assert.equal(productHelp.messages.length, 2);
+  await sendHelp("运行态追问");
+  assert.equal(created, 1);
+  assert.equal(productHelp.messages.length, 4);
+  bindHelpPage("demo", "冷却系统", 2, true);
+  assert.deepEqual(productHelp.messages, []);
+  await sendHelp("新版问题");
+  assert.equal(created, 2);
+  bindHelpPage("");
+  assert.deepEqual(productHelp.messages, []);
+  assert.equal(productHelp.pageVersion, null);
+});
+
+test("版本暂停保留旧消息，屏蔽晚到回复，禁止发送、重查和新会话", async () => {
+  bindHelpPage("demo", "冷却系统", 1, true);
+  const started = Promise.withResolvers<void>(), late = Promise.withResolvers<Response>();
+  let requestId = "", questionCalls = 0;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/sessions")) return json({ sessionId: "paused" });
+    questionCalls++;
+    const body = JSON.parse(init?.body as string);
+    if (questionCalls === 1) return json({ requestId: body.requestId, answer: "旧快照", sources: [],
+      active: { status: "ready", notice: "本次资料", queryId: "q1", data: activePage() } });
+    requestId = body.requestId; started.resolve(); return late.promise;
+  };
+  await queryHelpActive();
+  const old = productHelp.messages[1].id;
+  const pending = sendHelp("问一下使用方法");
+  await started.promise;
+  pauseHelpVersion(2);
+  assert.equal(productHelp.pending, false);
+  await sendHelp("再提问"); await queryHelpActive(); await queryHelpHistory();
+  await refreshHelpActive(old); await retryHelp(); startNewHelpSession();
+  assert.equal(questionCalls, 2);
+  late.resolve(json({ requestId, answer: "新版通知后的晚到回答", sources: [] }));
+  await pending;
+  assert.equal(productHelp.messages.length, 3);
+  assert.equal(productHelp.messages[1].active?.data?.alarms[0].observation.id, 101);
+  assert.equal(productHelp.messages.some(message => message.text.includes("晚到回答")), false);
+  assert.equal(productHelp.pageVersion, 1);
+  bindHelpPage("demo", "冷却系统", 2, true);
+  assert.equal(productHelp.versionPaused, false);
+  assert.deepEqual(productHelp.messages, []);
+});
+
+test("版本暂停发生在会话创建阶段，也不会继续调用提问接口", async () => {
+  bindHelpPage("demo", "冷却系统", 1, true);
+  const started = Promise.withResolvers<void>(), late = Promise.withResolvers<Response>();
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; started.resolve(); return late.promise; };
+  const pending = queryHelpActive();
+  await started.promise;
+  pauseHelpVersion(2);
+  late.resolve(json({ sessionId: "too-late" }));
+  await pending;
+  assert.equal(calls, 1);
+  assert.equal(productHelp.pending, false);
+  assert.equal(productHelp.versionPaused, true);
+});
+
+test("通知到达前的错页、新版或旧版结果均被拒绝，不能升级画面版本", async () => {
+  for (const wrong of [{ ...activePage(102), version: 2 }, { ...activePage(102), pageId: "other" }, { ...activePage(102), version: 1 }]) {
+    bindHelpPage("demo", "冷却系统", wrong.version === 1 ? 2 : 1, true);
+    const expectedVersion = productHelp.pageVersion;
+    let calls = 0;
+    globalThis.fetch = async (url, init) => {
+      if (String(url).endsWith("/sessions")) return json({ sessionId: "mismatch" });
+      calls++;
+      return json({ requestId: JSON.parse(init?.body as string).requestId, answer: "不能展示的新资料", sources: [],
+        active: { status: "ready", notice: "资料", queryId: "wrong", data: wrong } });
+    };
+    await queryHelpActive();
+    assert.equal(productHelp.versionPaused, true);
+    assert.equal(productHelp.versionMismatch, true);
+    assert.equal(productHelp.pageVersion, expectedVersion);
+    assert.equal(productHelp.messages.filter(message => message.role === "assistant").length, 0);
+    await queryHelpActive();
+    assert.equal(calls, 1);
+  }
+});
+
+test("重查得到新版结果不替换旧快照或来源", async () => {
+  bindHelpPage("demo", "冷却系统", 1, true);
+  let calls = 0;
+  globalThis.fetch = async (url, init) => String(url).endsWith("/sessions") ? json({ sessionId: "old" })
+    : json({ requestId: JSON.parse(init?.body as string).requestId, answer: "快照", sources: [],
+      active: { status: "ready", notice: "资料", queryId: `q${++calls}`, data: { ...activePage(calls === 1 ? 101 : 102), version: calls === 1 ? 1 : 2 } } });
+  await queryHelpActive();
+  await refreshHelpActive(productHelp.messages[1].id);
+  assert.equal(productHelp.messages.length, 2);
+  assert.equal(productHelp.messages[1].active?.queryId, "q1");
+  assert.equal(productHelp.messages[1].active?.data?.alarms[0].observation.id, 101);
+  assert.equal(productHelp.versionPaused, true);
+});
+
+test("历史结果版本变化暂停全部查询，不改写旧批次", async () => {
+  bindHelpPage("demo", "冷却系统", 1, true);
+  let calls = 0;
+  globalThis.fetch = async (url, init) => String(url).endsWith("/sessions") ? json({ sessionId: "history" })
+    : json({ requestId: JSON.parse(init?.body as string).requestId, answer: "历史", sources: [],
+      history: ++calls === 1 ? { status: "ready", notice: "记录", queryId: "q1", data: historyPage() }
+        : { status: "version_changed", notice: "版本变化" } });
+  await queryHelpHistory();
+  const id = productHelp.messages[1].id;
+  await moreHelpHistory(id);
+  assert.equal(productHelp.versionPaused, true);
+  assert.equal(productHelp.messages[1].history?.status, "ready");
+  assert.equal(productHelp.messages[1].history?.data?.records.length, 20);
+  await moreHelpHistory(id); await sendHelp("问指南");
+  assert.equal(calls, 2);
 });

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../auth-fixtures";
 
 test("运行态保留旧版本，刷新后仅接受新版本发布之后的观测", async ({ page, request }) => {
   const errors: string[] = [];

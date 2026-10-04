@@ -13,6 +13,7 @@ import {
   type TextBlockNode,
   type TrendChartNode,
 } from "@industrial/schema";
+import { auth } from "@/data/auth";
 import { loadPageSchema, savePageSchema } from "@/data/pageRepository";
 
 export const useEditorDocumentStore = defineStore("editor-document", () => {
@@ -22,6 +23,8 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
   const history = ref<PageSchema[]>([clonePageSchema(schema.value)]);
   const historyIndex = ref(0);
   let loadSequence = 0;
+  let ownerId: number | null = null;
+  let loadedPageId = "";
 
   const selectedNode = computed(() =>
     schema.value.components.find((node) => node.id === selectedId.value) ?? null,
@@ -45,9 +48,12 @@ export const useEditorDocumentStore = defineStore("editor-document", () => {
   }
 
   async function load(pageId: string): Promise<void> {
+    if (dirty.value && loadedPageId === pageId && ownerId === auth.user?.id) return;
     const sequence = ++loadSequence;
     const loaded = await loadPageSchema(pageId);
     if (sequence !== loadSequence) return;
+    ownerId = auth.user?.id ?? null;
+    loadedPageId = pageId;
     schema.value = loaded;
     selectedId.value = schema.value.components[0]?.id ?? null;
     dirty.value = false;

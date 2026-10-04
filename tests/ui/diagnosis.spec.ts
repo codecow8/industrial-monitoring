@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/auth/me", route => route.fulfill({ json: {
+    id: 1, username: "ui-test", expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+  } }));
+});
+
 test("活动告警可打开分析、展示证据并在失败后重试", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));

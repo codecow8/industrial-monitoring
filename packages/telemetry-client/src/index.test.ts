@@ -7,9 +7,9 @@ import {
 
 
 class FakeSocket implements TelemetrySocket {
-  private listeners = new Map<string, Array<(event: { data?: string }) => void>>();
+  private listeners = new Map<string, Array<(event: { data?: string; code?: number }) => void>>();
 
-  addEventListener(type: string, listener: (event: { data?: string }) => void) {
+  addEventListener(type: string, listener: (event: { data?: string; code?: number }) => void) {
     const listeners = this.listeners.get(type) ?? [];
     listeners.push(listener);
     this.listeners.set(type, listeners);
@@ -20,8 +20,8 @@ class FakeSocket implements TelemetrySocket {
   constructor(private readonly now: () => number) {}
   close() { this.closed = true; }
 
-  emit(type: "open" | "close") {
-    this.listeners.get(type)?.forEach((listener) => listener({}));
+  emit(type: "open" | "close", code?: number) {
+    this.listeners.get(type)?.forEach((listener) => listener({ code }));
   }
 
   packet(frame: Record<string, unknown>) {
@@ -70,12 +70,13 @@ class FakeScheduler implements TelemetryScheduler {
 }
 
 
-function setup() {
+function setup(extra: { checkAuthentication?: () => Promise<boolean>; onAuthenticationExpired?: () => void } = {}) {
   const scheduler = new FakeScheduler();
   const sockets: FakeSocket[] = [];
   const session = new TelemetrySession("ws://example.test/telemetry", {
     pageId: "demo", pageVersion: 1, publishedAt: new Date(0).toISOString(),
     scheduler,
+    ...extra,
     createSocket: () => {
       const socket = new FakeSocket(scheduler.now);
       sockets.push(socket);
@@ -251,4 +252,55 @@ describe("server observation freshness and version isolation", () => {
     session.start();
     expect(sockets).toHaveLength(1);
   });
+});
+
+it("认证关闭停止重连、丢弃待渲染更新且旧会话不能自行重启", () => {
+  const expired = vi.fn();
+  const { scheduler, session, sockets } = setup({ onAuthenticationExpired: expired });
+  sockets[0].message({ temperature: 83 });
+  sockets[0].emit("close", 4401);
+  scheduler.flushFrame();
+  expect(session.authenticationExpired).toBe(true);
+  expect(session.connection).toBe("disconnected");
+  expect(session.point("temperature").freshness).toBe("waiting");
+  expect(expired).toHaveBeenCalledTimes(1);
+  expect(scheduler.timers).toHaveLength(0);
+  session.start();
+  expect(sockets).toHaveLength(1);
+});
+
+it("握手关闭后复验登录，未登录进入失效流程而非反复重连", async () => {
+  const expired = vi.fn();
+  const { scheduler, session, sockets } = setup({ checkAuthentication: async () => false, onAuthenticationExpired: expired });
+  sockets[0].emit("close", 1006);
+  await Promise.resolve();
+  expect(session.authenticationExpired).toBe(true);
+  expect(expired).toHaveBeenCalledTimes(1);
+  expect(scheduler.timers).toHaveLength(0);
+});
+
+it("普通断线和认证服务故障不冒充注销，仍按退避重连", async () => {
+  for (const checkAuthentication of [async () => true, async () => { throw new Error("service unavailable"); }]) {
+    const expired = vi.fn();
+    const { scheduler, session, sockets } = setup({ checkAuthentication, onAuthenticationExpired: expired });
+    sockets[0].emit("close", 1006);
+    await Promise.resolve();
+    expect(session.authenticationExpired).toBe(false);
+    expect(expired).not.toHaveBeenCalled();
+    expect(scheduler.timers[0].delay).toBe(1000);
+    scheduler.runNextTimer();
+    expect(sockets).toHaveLength(2);
+    session.stop();
+  }
+});
+
+it("组件停止后迟到的合法身份检查不能重启连接", async () => {
+  let finish!: (valid: boolean) => void;
+  const { scheduler, session, sockets } = setup({ checkAuthentication: () => new Promise(resolve => { finish = resolve; }) });
+  sockets[0].emit("close", 1006);
+  session.stop();
+  finish(true);
+  await Promise.resolve();
+  expect(scheduler.timers).toHaveLength(0);
+  expect(sockets).toHaveLength(1);
 });

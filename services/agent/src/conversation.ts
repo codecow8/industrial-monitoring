@@ -1,3 +1,6 @@
+import { LoginRequiredError } from "./authentication.ts";
+import { readActiveAlarms } from "./active-alarms.ts";
+import { readAlarmHistory } from "./alarm-history.ts";
 import { createHelpSession } from "./session.ts";
 import type { GuideToolDetails } from "./guide-tool.ts";
 import { createAlarmHistoryTool, type HistoryToolResult } from "./alarm-history-tool.ts";
@@ -82,9 +85,17 @@ export function buildActiveReply(active: ActiveAlarmToolResult): HelpReply {
   return { answer, sources, active };
 }
 
-export async function createHelpConversation(context: { pageId?: string } = {}): Promise<HelpConversation> {
-  const historyTool = context.pageId ? createAlarmHistoryTool(context.pageId) : undefined;
-  const activeTool = context.pageId ? createActiveAlarmTool(context.pageId) : undefined;
+export async function createHelpConversation(context: { pageId?: string; loginCookie?: string } = {}): Promise<HelpConversation> {
+  let loginFailed = false;
+  const verifiedRead = async <T>(operation: Promise<T>): Promise<T> => {
+    try { return await operation; }
+    catch (error) { if (error instanceof LoginRequiredError) loginFailed = true; throw error; }
+  };
+  // 凭据只在固定本机读取闭包中使用，不进入模型参数、资源或工具结果。
+  const historyTool = context.pageId ? createAlarmHistoryTool(context.pageId, (page, offset, asOf, signal) =>
+    verifiedRead(readAlarmHistory(page, offset, asOf, signal, context.loginCookie))) : undefined;
+  const activeTool = context.pageId ? createActiveAlarmTool(context.pageId, (page, signal) =>
+    verifiedRead(readActiveAlarms(page, signal, context.loginCookie))) : undefined;
   let activeResult: ActiveAlarmToolResult | undefined;
   const activeExecute = activeTool?.execute;
   if (activeTool && activeExecute) activeTool.execute = async (id, params, signal) => {
@@ -129,6 +140,7 @@ export async function createHelpConversation(context: { pageId?: string } = {}):
       const historyCheckpoint = historyTool?.checkpoint();
       historyResult = undefined;
       activeResult = undefined;
+      loginFailed = false;
       historyCommand = command;
       allowNext = command ? command.action === "next" : /继续|下一页|下一批|更多/.test(question);
       let retrieved: GuideSource[] | undefined;
@@ -143,6 +155,7 @@ export async function createHelpConversation(context: { pageId?: string } = {}):
         signal.throwIfAborted();
         await session.prompt(question);
         signal.throwIfAborted();
+        if (loginFailed) throw new LoginRequiredError();
         const last = session.messages.at(-1);
         if (last?.role === "assistant" && (last.stopReason === "error" || last.stopReason === "aborted")) {
           throw new Error("模型请求未完成。");

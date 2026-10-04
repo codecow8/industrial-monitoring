@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { authFetch } from "./authHttp.ts";
 import type { AlarmHistoryPage } from "./pageRepository.ts";
 
 export type HelpSource = { source: string; title: string; content: string };
@@ -27,6 +28,10 @@ export const productHelp = reactive({
   pageId: "",
   pageName: "",
   pageVersion: null as number | null,
+  runtime: false,
+  versionPaused: false,
+  latestVersion: null as number | null,
+  versionMismatch: false,
   queryingHistory: false,
   queryingActive: false,
 });
@@ -86,7 +91,7 @@ class HelpError extends Error {
 async function post(path: string, body: unknown): Promise<any> {
   let response: Response;
   try {
-    response = await fetch(`/api/help${path}`, {
+    response = await authFetch(`/api/help${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Industrial-Help": "1" },
       body: JSON.stringify(body),
@@ -103,7 +108,7 @@ async function post(path: string, body: unknown): Promise<any> {
 }
 
 async function ask(request: Question, retry: boolean): Promise<void> {
-  if (productHelp.pending || productHelp.expired) return;
+  if (productHelp.pending || productHelp.expired || productHelp.versionPaused) return;
   const currentGeneration = generation;
   const boundPage = productHelp.pageId;
   productHelp.error = "";
@@ -134,9 +139,19 @@ async function ask(request: Question, retry: boolean): Promise<void> {
     }
     const history = result.history as HistoryResult | undefined;
     const active = result.active as ActiveResult | undefined;
+    // 运行画面固定发布版本；即使 WS 通知尚未到达，也不能静默升级成新版资料。
+    if (productHelp.runtime && ([active?.data, history?.data].some(data => data &&
+      (data.pageId !== boundPage || data.version !== productHelp.pageVersion)) ||
+      history?.status === "version_changed" ||
+      ((active?.status === "not_published" || history?.status === "not_published") && !!productHelp.pageVersion))) {
+      const newer = [active?.data, history?.data].find(data => data?.pageId === boundPage &&
+        Number.isInteger(data.version) && data.version > (productHelp.pageVersion ?? 0))?.version;
+      pauseHelpVersion(newer ?? null, true);
+      return;
+    }
     if (expectsActive && !active) throw new HelpError("INVALID_RESPONSE", "本次未获得新的活动告警快照，请重试。");
     if (active && !validActive(active, boundPage)) throw new HelpError("INVALID_RESPONSE", "活动告警结果不符合当前页面或资料合同。");
-    if (active?.data) productHelp.pageVersion = Math.max(productHelp.pageVersion ?? 0, active.data.version);
+    if (active?.data && !productHelp.runtime) productHelp.pageVersion = Math.max(productHelp.pageVersion ?? 0, active.data.version);
     if (request.historyCommand && !history) throw new HelpError("INVALID_RESPONSE", "本次未获得可核对的历史结果，请重试。");
     if (history?.status === "version_changed") {
       productHelp.pageVersion = null;
@@ -146,7 +161,7 @@ async function ask(request: Question, retry: boolean): Promise<void> {
     if (history && !validHistory(history, boundPage)) {
       throw new HelpError("INVALID_RESPONSE", "历史结果不符合当前页面或分页合同。");
     }
-    if (history?.data) productHelp.pageVersion = Math.max(productHelp.pageVersion ?? 0, history.data.version);
+    if (history?.data && !productHelp.runtime) productHelp.pageVersion = Math.max(productHelp.pageVersion ?? 0, history.data.version);
     if (targetId) {
       const target = productHelp.messages.find((message) => message.id === targetId);
       if (!target?.history?.data) throw new HelpError("INVALID_RESPONSE", "原查询已失效，请重新查询。");
@@ -207,7 +222,7 @@ export function refreshHelpActive(messageId: string): Promise<void> {
 }
 
 export function startNewHelpSession(): void {
-  if (productHelp.pending) return;
+  if (productHelp.pending || productHelp.versionPaused) return;
   sessionId = null;
   lastRequest = null;
   productHelp.messages = [];
@@ -218,14 +233,32 @@ export function startNewHelpSession(): void {
   productHelp.queryingActive = false;
 }
 
-export function bindHelpPage(pageId: string, pageName = pageId): void {
+export function bindHelpPage(pageId: string, pageName = pageId, version?: number | null, runtime = false): void {
   productHelp.pageName = pageName;
-  if (productHelp.pageId === pageId) return;
+  productHelp.runtime = runtime;
+  if (pageId && productHelp.pageId === pageId && (version === undefined || productHelp.pageVersion === version)
+    && !productHelp.versionPaused) return;
   generation++;
   productHelp.pending = false;
+  productHelp.versionPaused = false;
+  productHelp.latestVersion = null;
+  productHelp.versionMismatch = false;
   startNewHelpSession();
   productHelp.pageId = pageId;
-  productHelp.pageVersion = null;
+  productHelp.pageVersion = version ?? null;
+}
+
+/** 保留旧对话供核对，使在途请求和会话失效；刷新/重新绑定新版后才能恢复。 */
+export function pauseHelpVersion(latestVersion: number | null, mismatch = false): void {
+  if (!productHelp.runtime) return;
+  generation++;
+  sessionId = null;
+  lastRequest = null;
+  productHelp.pending = false;
+  productHelp.error = "";
+  productHelp.versionPaused = true;
+  productHelp.latestVersion = latestVersion;
+  productHelp.versionMismatch = mismatch;
 }
 
 export function moreHelpHistory(messageId: string): Promise<void> {

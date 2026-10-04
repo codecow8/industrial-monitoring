@@ -1,3 +1,4 @@
+import { LoginRequiredError } from "./authentication.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { request as httpRequest } from "node:http";
@@ -12,7 +13,7 @@ function deferred<T>() {
 }
 
 async function start(t: TestContext, options: Parameters<typeof createHelpHttpServer>[0] = {}) {
-  const server = createHelpHttpServer({
+  const server = createHelpHttpServer({ authenticate: async () => ({ owner: "test-login", cookie: "industrial_session=test-cookie" }),
     createConversation: async () => ({ ask: async () => ({ answer: "完成", sources: [] }), dispose() {} }),
     ...options,
   });
@@ -159,7 +160,7 @@ test("页面只在创建时传给服务端工厂，不能在提问时改绑或�
   } });
   const created = await api.post("/api/help/sessions", { pageId: "demo" });
   assert.equal(created.status, 201);
-  assert.deepEqual(contexts, [{ pageId: "demo" }]);
+  assert.deepEqual(contexts, [{ pageId: "demo", loginCookie: "industrial_session=test-cookie" }]);
   const path = `/api/help/sessions/${created.body.sessionId}/questions`;
   assert.equal((await api.post(path, { requestId: randomUUID(), question: "历史", pageId: "other" })).status, 400);
   assert.equal((await api.post("/api/help/sessions", { pageId: "demo", url: "https://evil.example" })).status, 400);
@@ -181,4 +182,34 @@ test("显式分页命令传入会话，重试编号不能换用别的查询或�
   assert.deepEqual(commands, [body.historyCommand]);
   assert.equal((await api.post(path, { ...body, historyCommand: { action: "start" } })).status, 409);
   assert.equal((await api.post(path, { ...body, requestId: randomUUID(), historyCommand: { ...body.historyCommand, pageId: "other" } })).status, 400);
+});
+
+test("未登录不能创建问答，会话不能被另一登录复用", async (t) => {
+  let owner: string | null = null;
+  const api = await start(t, { authenticate: async () => owner ? { owner, cookie: "industrial_session=test-cookie" } : null });
+  assert.equal((await api.post("/api/help/sessions", {})).status, 401);
+  owner = "login-one";
+  const id = await api.session();
+  owner = "login-two";
+  assert.equal((await api.post(`/api/help/sessions/${id}/questions`, { requestId: randomUUID(), question: "怎样发布？" })).status, 410);
+  owner = null;
+  assert.equal((await api.post(`/api/help/sessions/${id}/questions`, { requestId: randomUUID(), question: "怎样发布？" })).status, 401);
+});
+
+test("验证后的凭据只传内部工厂，客户端不能注入，失效返回401而非空结果", async (t) => {
+  const secret = "industrial_session=private-test-credential";
+  const api = await start(t, { authenticate: async () => ({ owner: "verified-owner", cookie: secret }),
+    createConversation: async context => {
+      assert.equal(context.loginCookie, secret);
+      return { ask: async () => { throw new LoginRequiredError(); }, dispose() {} };
+    } });
+  assert.equal((await api.post("/api/help/sessions", { pageId: "demo", loginCookie: "forged" })).status, 400);
+  const created = await api.post("/api/help/sessions", { pageId: "demo" });
+  assert.equal(created.status, 201);
+  assert.ok(!JSON.stringify(created.body).includes(secret));
+  const reply = await api.post(`/api/help/sessions/${created.body.sessionId}/questions`, { requestId: randomUUID(), question: "当前告警" });
+  assert.equal(reply.status, 401);
+  assert.equal(reply.body.error.code, "LOGIN_REQUIRED");
+  assert.ok(!JSON.stringify(reply.body).includes(secret));
+  assert.equal(reply.body.active, undefined);
 });

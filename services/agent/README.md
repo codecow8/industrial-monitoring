@@ -165,3 +165,23 @@ const matches = searchGuide(sections, "数据键在哪里设置？");
 cd services/agent
 node --experimental-strip-types --input-type=module -e 'import { loadGuide } from "./src/guide.ts"; import { createGuideSearchTool } from "./src/guide-tool.ts"; const tool = createGuideSearchTool(await loadGuide("../../docs/product-guide.md")); console.log(await tool.execute("demo", { query: "怎样发布版本？" }));'
 ```
+
+## Web 运行态帮助入口
+
+编辑器与运行态页面均需平台登录，顶栏“使用帮助”复用同一侧栏与既有只读工具。运行态不显示退出登录，退出入口在编辑器。客户端绑定页面及已加载发布版本；同页同版本跨入口保留，换页/换版本/退出登录重置。新版通知或结果版本不符后旧对话只读、全部提问暂停，晚到结果不写入旧视图；手动刷新后进入新版新会话。
+
+普通前端状态测试不调用模型。运行态真实 Pi 浏览器流程只在显式开关后执行：
+
+```sh
+LIVE_RUNTIME_HELP_EVAL=1 pnpm exec playwright test --config playwright.live.config.ts tests/live/runtime-help.spec.mts
+```
+
+使用既有认证夹具创建独立测试账号、页面与数据键，通过真实认证 HTTP/SDK 代码在独立本机端口提问；浏览器测试代理将帮助请求转发到该端口，不重启用户的 8001 服务，不记录 Cookie 或凭据。每次只提交一条问题，无自动模型重试，首次结果保存到 `.scratch/runtime-help-agent/live/`。
+
+2026-10-03：前端 15 项状态测试和 3 项浏览器用例通过。唯一一轮真实浏览器问题使用实际 `openai-codex/gpt-5.6-sol`，两条活动告警及观测来源核对通过。当时后台认证范围尚待选择；后续后台保护记录见 `.scratch/runtime-data-auth/`。详情见 `.scratch/runtime-help-agent/acceptance.md`。
+
+## 后台读取认证接入
+
+2026-10-04：业务发布/版本/活动/历史/证据 GET 和 WS 都要求有效平台登录。帮助 HTTP 每次验证登录并按 owner 隔离对话，在内部工厂向只读业务闭包传递验证后的 Cookie；模型工具参数、提示资源、内容、来源和报告都没有 Cookie 字段。问答过程中业务读取返回401时，帮助接口也返回 LOGIN_REQUIRED/401，不把失效误报为空结果。
+
+显式 `eval:active` / `eval:help` 使用 `evals/platform-login.ts` 创建独立短期测试账号，经真实登录 API 获取内存 Cookie；退出脚本删除该账号/会话。它们依赖本机业务 API 和现有测试数据库，不要求用户提供个人凭据，不把密码放在进程参数或报告。普通 test 不创建评测账号、不调用模型。部署仍只限本机 Pi，不增加模型工具或放开角色/页面权限。

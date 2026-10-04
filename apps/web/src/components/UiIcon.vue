@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineProps<{
-  name: "play" | "save" | "chart" | "text" | "line" | "device" | "bell" | "lock" | "copy" | "import" | "cursor" | "undo" | "redo" | "trash" | "back" | "info" | "close" | "history";
+  name: "eye" | "eyeOff" | "play" | "save" | "chart" | "text" | "line" | "device" | "bell" | "lock" | "copy" | "import" | "cursor" | "undo" | "redo" | "trash" | "back" | "info" | "close" | "history";
   size?: number;
 }>();
 </script>
@@ -18,7 +18,13 @@ defineProps<{
     stroke-linejoin="round"
     aria-hidden="true"
   >
-    <template v-if="name === 'history'">
+    <template v-if="name === 'eye'">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />
+    </template>
+    <template v-else-if="name === 'eyeOff'">
+      <path d="m3 3 18 18" /><path d="M10.6 5.1A11 11 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3.1 3.9M6.1 6.1A18 18 0 0 0 2 12s3.5 7 10 7a12 12 0 0 0 5.9-1.9" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </template>
+    <template v-else-if="name === 'history'">
       <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
     </template>
     <template v-else-if="name === 'info'">

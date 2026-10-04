@@ -44,11 +44,12 @@ mkdir -p "$deploy_root/backups"
 "${compose[@]}" stop api simulator
 "${compose[@]}" run --rm --no-deps api alembic upgrade head
 "${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180
-# This reads through the repository and proves migrations/database connectivity.
+# Verify migrated tables directly; protected reads must not be used as anonymous health checks.
 "${compose[@]}" exec -T api python -c \
-  "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/api/pages/demo/published', timeout=5)"
+  "from sqlalchemy import select; from industrial_api.database import SessionFactory; from industrial_api.models import AuthUser, PageVersion; s=SessionFactory(); s.scalar(select(AuthUser.id).limit(1)); s.scalar(select(PageVersion.id).limit(1)); s.close()"
 curl --fail --silent http://127.0.0.1:8081/api/health
-[[ $(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/editor/demo) == 401 ]]
+[[ $(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/api/pages/demo/published) == 401 ]]
+[[ $(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/api/pages/demo/draft) == 401 ]]
 [[ $(curl --silent -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8081/api/telemetry) == 404 ]]
 ln -sfn "$PWD" "$deploy_root/current"
 echo "Deployed $release_sha. Backups retained in $deploy_root/backups."
