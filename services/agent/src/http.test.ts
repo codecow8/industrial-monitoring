@@ -36,6 +36,22 @@ async function start(t: TestContext, options: Parameters<typeof createHelpHttpSe
   return { post, session, base };
 }
 
+test("会话观测只包含实际模型标识，不包含内部身份或问题", async (t) => {
+  const events: unknown[] = [];
+  const api = await start(t, {
+    onSessionCreated: event => events.push(event),
+    createConversation: async () => ({ model: { provider: "actual-provider", id: "actual-model" },
+      ask: async () => ({ answer: "完成", sources: [] }), dispose() {} }),
+  });
+  const sessionId = await api.session();
+  assert.deepEqual(events, [{ sessionId, provider: "actual-provider", id: "actual-model" }]);
+  assert.equal(JSON.stringify(events).includes("industrial_session"), false);
+  const result = await api.post(`/api/help/sessions/${sessionId}/questions`, { requestId: randomUUID(), question: "怎样发布？" });
+  assert.equal(result.status, 200);
+  assert.equal(events.length, 1);
+  assert.equal(JSON.stringify(result.body).includes("actual-model"), false);
+});
+
 test("两个标签页会话相互隔离，完整结果按请求编号缓存", async (t) => {
   const histories: string[][] = [];
   const api = await start(t, { createConversation: async () => {

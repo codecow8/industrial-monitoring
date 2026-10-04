@@ -178,6 +178,21 @@ LIVE_RUNTIME_HELP_EVAL=1 pnpm exec playwright test --config playwright.live.conf
 
 使用既有认证夹具创建独立测试账号、页面与数据键，通过真实认证 HTTP/SDK 代码在独立本机端口提问；浏览器测试代理将帮助请求转发到该端口，不重启用户的 8001 服务，不记录 Cookie 或凭据。每次只提交一条问题，无自动模型重试，首次结果保存到 `.scratch/runtime-help-agent/live/`。
 
+## 默认开发代理链路验收
+
+默认帮助服务创建会话时只在服务端输出 `help-session-created` JSON，字段为 sessionId、实际模型 provider/id；不记录 Cookie、问题或工具资料，也不加入网页响应。
+
+验收前核对 8000 API、8001 `pnpm dev:agent` 和 5173 `pnpm dev` 的进程归属。端口空闲才启动，Vite 使用 `--strictPort` 防止悄悄换端口。独立验收配置不自动重启服务，不拦截帮助请求；复用测试夹具创建并清理账号，页面与观测使用独立键。
+
+```bash
+# 零模型提问：匿名401、登录会话201、业务读取和真实WS连接。
+DEFAULT_HELP_PREFLIGHT_ONLY=1 pnpm exec playwright test --config playwright.default-help.config.ts
+# 显式的一条真实问题；指定正在运行的默认Agent服务日志，核对实际会话模型。
+LIVE_DEFAULT_HELP_EVAL=1 DEFAULT_HELP_LOG_FILE=/tmp/industrial-default-help-agent.log pnpm exec playwright test --config playwright.default-help.config.ts
+```
+
+上述命令在仓库根目录执行。日志文件应为本次默认Agent进程的输出，启动时可用 `pnpm dev:agent > /tmp/industrial-default-help-agent.log 2>&1`；已有服务先核对，不为了日志覆盖或重启其他进程。普通测试不包含此入口。显式验收只提交一条用户问题，Pi 工具循环可能包含多次供应商请求，不自动重试；首次结果追加保存在 `.scratch/default-help-chain/runs/`，截图位于 `/tmp/industrial-default-help-<runId>.png`。新鲜度按实际 queriedAt 核对，超时、过期和缺数不能伪装正常。
+
 2026-10-03：前端 15 项状态测试和 3 项浏览器用例通过。唯一一轮真实浏览器问题使用实际 `openai-codex/gpt-5.6-sol`，两条活动告警及观测来源核对通过。当时后台认证范围尚待选择；后续后台保护记录见 `.scratch/runtime-data-auth/`。详情见 `.scratch/runtime-help-agent/acceptance.md`。
 
 ## 后台读取认证接入

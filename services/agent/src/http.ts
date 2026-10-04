@@ -59,6 +59,7 @@ function readBody(request: IncomingMessage): Promise<unknown> {
 export function createHelpHttpServer(options: {
   authenticate?: typeof authenticateHelp;
   createConversation?: (context: { pageId?: string; loginCookie?: string }) => Promise<HelpConversation>;
+  onSessionCreated?: (session: { sessionId: string; provider?: string; id?: string }) => void;
   now?: () => number;
   idleMs?: number;
   timeoutMs?: number;
@@ -163,6 +164,8 @@ export function createHelpHttpServer(options: {
         finally { creating--; }
         const sessionId = randomUUID();
         entries.set(sessionId, { owner: identity.owner, conversation, lastUsed: now(), requests: new Map() });
+        // 只传会话和实际模型标识，内部身份/提示词不能进入观测日志。
+        options.onSessionCreated?.({ sessionId, provider: conversation.model?.provider, id: conversation.model?.id });
         send({ status: 201, body: { sessionId, idleTimeoutSeconds: 900 } });
         return;
       }
