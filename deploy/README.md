@@ -81,3 +81,5 @@ docker compose --env-file ../.env -f compose.yml exec api python -m industrial_a
 ```
 
 Keep the password in a secure channel and give it only to intended reviewers. The initial account migration does not import old Basic Auth passwords; provision an editor account for the project owner if no editor exists. Verify login, viewer role, read-only data/WSS, editing/publishing 403, logout and rejected session reuse. A shared-origin H5 smoke does not substitute for real WeChat device verification.
+
+Application image preparation is bounded to 180 seconds on the server. If the registry stalls, the GitHub runner downloads the same SHA-tagged images and streams a Docker archive through SSH. The deployment script verifies each required cached image before stopping services. Manual deployment without `APP_IMAGES_PRELOADED=true` retains normal registry pulling.

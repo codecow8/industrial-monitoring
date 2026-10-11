@@ -15,7 +15,14 @@ if [[ -d "$PWD/.docker" ]]; then
 fi
 compose=(docker compose --env-file "$deploy_root/.env" -f compose.yml)
 "${compose[@]}" config --quiet
-"${compose[@]}" pull api simulator web
+if [[ ${APP_IMAGES_PRELOADED:-false} == true ]]; then
+  prepared_images=$("${compose[@]}" config --images)
+  while IFS= read -r image; do
+    docker image inspect "$image" >/dev/null
+  done <<< "$prepared_images"
+else
+  "${compose[@]}" pull api simulator web
+fi
 
 previous_dir=""
 if [[ -L "$deploy_root/current" ]]; then

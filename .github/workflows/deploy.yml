@@ -114,7 +114,19 @@ jobs:
             docker logout ghcr.io
           fi
           printf '%s' "$REGISTRY_TOKEN" | ssh "$target" "docker --config '$release_dir/.docker' login ghcr.io -u '$REGISTRY_USER' --password-stdin"
-          ssh "$target" "bash '$release_dir/deploy.sh' '$RELEASE_SHA'"
+          # The host's registry connection can stall; prepare all app images before stopping services.
+          if ! ssh "$target" "RELEASE_SHA='$RELEASE_SHA' timeout 180 docker --config '$release_dir/.docker' compose --env-file /opt/industrial-monitoring/.env -f '$release_dir/compose.yml' pull api simulator web"; then
+            printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+            app_images=()
+            for service in api simulator web; do
+              image="ghcr.io/${{ github.repository }}-$service:$RELEASE_SHA"
+              docker pull "$image"
+              app_images+=("$image")
+            done
+            docker save "${app_images[@]}" | gzip -1 | ssh "$target" 'gunzip | docker load'
+            docker logout ghcr.io
+          fi
+          ssh "$target" "APP_IMAGES_PRELOADED=true bash '$release_dir/deploy.sh' '$RELEASE_SHA'"
       - name: Verify public HTTPS and API
         env:
           DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
