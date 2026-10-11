@@ -51,5 +51,6 @@ curl --fail --silent http://127.0.0.1:8081/api/health
 [[ $(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/api/pages/demo/published) == 401 ]]
 [[ $(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/api/pages/demo/draft) == 401 ]]
 [[ $(curl --silent -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8081/api/telemetry) == 404 ]]
+curl --fail --silent http://127.0.0.1:8081/mobile/ | grep -q '/mobile/assets/'
 ln -sfn "$PWD" "$deploy_root/current"
 echo "Deployed $release_sha. Backups retained in $deploy_root/backups."

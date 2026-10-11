@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from .auth import allowed_origins, check_origin, current_user, router as auth_router
+from .auth import allowed_origins, check_origin, current_user, require_editor, router as auth_router
 from .database import get_session
 from .active import router as active_router
 from .diagnosis import router as diagnosis_router
@@ -28,7 +28,7 @@ app.add_middleware(
     allow_origins=allowed_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 app.include_router(auth_router)
 app.include_router(telemetry_router)
@@ -43,7 +43,7 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.put("/api/pages/{page_key}/draft", dependencies=[Depends(current_user), Depends(check_origin)])
+@app.put("/api/pages/{page_key}/draft", dependencies=[Depends(require_editor), Depends(check_origin)])
 def put_draft(
     page_key: str,
     schema: dict[str, Any] = Body(...),
@@ -60,7 +60,7 @@ def put_draft(
 
 @app.get(
     "/api/pages/{page_key}/draft",
-    dependencies=[Depends(current_user)],
+    dependencies=[Depends(require_editor)],
     response_model=None,
     responses={204: {"description": "No draft has been saved"}},
 )
@@ -74,7 +74,7 @@ def read_draft(
     return schema
 
 
-@app.post("/api/pages/{page_key}/publish", response_model=None, dependencies=[Depends(current_user), Depends(check_origin)])
+@app.post("/api/pages/{page_key}/publish", response_model=None, dependencies=[Depends(require_editor), Depends(check_origin)])
 async def publish_page(
     page_key: str,
     session: Session = Depends(get_session),

@@ -1,0 +1,24 @@
+{
+  "name": "工业智控",
+  "appid": "",
+  "versionName": "0.1.0",
+  "versionCode": "1",
+  "vueVersion": "3",
+  "mp-weixin": {
+    "appid": "touristappid",
+    "setting": {
+      "urlCheck": true
+    },
+    "usingComponents": true,
+    "libVersion": "3.17.3"
+  },
+  "h5": {
+    "router": {
+      "mode": "hash",
+      "base": "/mobile/"
+    }
+  },
+  "uniStatistics": {
+    "enable": false
+  }
+}

@@ -1377,4 +1377,131 @@ function TrendPrototypeApp() {
 
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<TrendPrototypeApp />);
+// 微信小程序评审入口；仅模拟交互，不请求业务接口。
+function MiniProgramPrototype() {
+  const [screen, setScreen] = useState("login");
+  const [target, setTarget] = useState("monitor");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [visible, setVisible] = useState(false);
+  const [error, setError] = useState("");
+  const [expired, setExpired] = useState(false);
+  const [loginFailure, setLoginFailure] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [dataMode, setDataMode] = useState("live");
+  const [value, setValue] = useState(83);
+  const [lastReceived, setLastReceived] = useState(() => new Date());
+  const [history, setHistory] = useState(false);
+  const [analysis, setAnalysis] = useState("idle");
+  const [analysisCase, setAnalysisCase] = useState("success");
+  const timer = useRef(null);
+  const scrollArea = useRef(null);
+  useEffect(() => { if (scrollArea.current) scrollArea.current.scrollTop = 0; }, [screen]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => {
+    if (screen === "login" || dataMode !== "live") return;
+    let index = 0;
+    const tick = window.setInterval(() => {
+      setValue([81.2, 82.1, 83, 82.6][index++ % 4]);
+      setLastReceived(new Date());
+    }, 1000);
+    return () => window.clearInterval(tick);
+  }, [screen, dataMode]);
+  const stale = dataMode === "offline" || dataMode === "stale";
+  const waiting = dataMode === "waiting";
+  const empty = dataMode === "empty";
+  const time = lastReceived.toLocaleTimeString("zh-CN", { hour12: false });
+  const go = (next) => { setScreen(next); setAnalysis("idle"); };
+  const expire = () => {
+    window.clearTimeout(timer.current); setPending(false); setAnalysis("idle");
+    setTarget(screen); setExpired(true); setPassword(""); setError(""); setScreen("login");
+  };
+  const login = (event) => {
+    event.preventDefault();
+    if (!username.trim() || !password) { setError("请输入账号和密码。"); return; }
+    setError(""); setPending(true);
+    timer.current = window.setTimeout(() => {
+      setPending(false);
+      if (loginFailure) { setError("登录服务暂时不可用，请稍后重试。"); return; }
+      if (username.trim() !== "demo" || password !== "demo") { setError("账号或密码错误，请重新输入。"); return; }
+      setPassword(""); setExpired(false); setScreen(target); setDataMode("live"); setLastReceived(new Date());
+    }, 600);
+  };
+  const diagnose = () => {
+    setAnalysis("loading");
+    timer.current = window.setTimeout(() => {
+      setAnalysis(analysisCase);
+      if (analysisCase === "failure") setAnalysisCase("success");
+    }, 800);
+  };
+  const switchData = (mode) => {
+    window.clearTimeout(timer.current); setAnalysis("idle"); setDataMode(mode);
+    if (mode === "live") { setValue(83); setLastReceived(new Date()); }
+  };
+  return <main className="mini-review">
+    <aside className="mini-review-notes">
+      <a className="mini-desktop-link" href="industrial-editor.html">← 电脑端原型</a>
+      <span className="mini-eyebrow">微信小程序 · 交互原型</span>
+      <h1>现场数据，<br />随手可查。</h1>
+      <p>手机查看已发布监控画面，<br />从告警追溯观测依据。</p>
+      <div className="mini-review-route"><span>01 登录</span><span>02 实时监控</span><span>03 告警详情</span></div>
+      <details className="mini-demo-controls" open>
+        <summary>原型评审控件</summary>
+        <p>以下控件仅用于模拟，不属于正式小程序。所有数值、观测编号和分析均为演示数据。</p>
+        {screen === "login" ? <><p>演示账号：<code>demo / demo</code></p><label><input type="checkbox" checked={loginFailure} onChange={e => setLoginFailure(e.target.checked)} />模拟登录服务不可用</label></> : <>
+          <label>监控状态<select aria-label="模拟监控状态" value={dataMode} onChange={e => switchData(e.target.value)}>
+            <option value="live">实时更新 · 有活动告警</option><option value="offline">网络断开 · 保留最后观测</option><option value="stale">已连接 · 数据已过期</option><option value="waiting">已连接 · 等待首次观测</option><option value="empty">实时更新 · 无活动告警</option>
+          </select></label>
+          <label>分析结果<select aria-label="模拟分析结果" value={analysisCase} onChange={e => { setAnalysisCase(e.target.value); setAnalysis("idle"); }}><option value="success">返回分析与依据</option><option value="insufficient">证据不足</option><option value="failure">下次服务不可用</option></select></label>
+          <button type="button" onClick={expire}>模拟登录过期</button>
+        </>}
+      </details>
+      <small>评审中 · 未连接后端或微信服务</small>
+    </aside>
+    <section className="mini-phone" aria-label="小程序手机预览" data-screen-label={`小程序 · ${screen === "login" ? "登录" : screen === "monitor" ? "监控" : "告警详情"}`}>
+      <header className="mini-nav">
+        {screen === "detail" ? <button aria-label="返回监控" onClick={() => go("monitor")}><Icon name="arrowLeft" size={21} /></button> : <span className="mini-logo"><Icon name="device" size={20} /></span>}
+        <strong>{screen === "detail" ? "告警详情" : "工业智控"}</strong><span className="mini-capsule" aria-hidden="true">••• │ ◉</span>
+      </header>
+      <div className="mini-scroll" ref={scrollArea}>
+        {screen === "login" ? <section className="mini-login">
+          <span className="mini-eyebrow">工业监控与巡检</span><h2>进入你的<br />监控现场。</h2><p>使用平台账号查看设备与告警。</p>
+          <form onSubmit={login} noValidate>
+            {expired && <div className="mini-notice" role="status">登录已过期，请重新登录。登录后返回刚才的页面。</div>}
+            <label htmlFor="mini-account">账号</label><input id="mini-account" autoComplete="off" placeholder="请输入平台账号" value={username} disabled={pending} onChange={e => { setUsername(e.target.value); setError(""); }} />
+            <label htmlFor="mini-password">密码</label><div className="mini-password"><input id="mini-password" autoComplete="off" placeholder="请输入密码" type={visible ? "text" : "password"} value={password} disabled={pending} onChange={e => { setPassword(e.target.value); setError(""); }} /><button type="button" aria-label={visible ? "隐藏密码" : "显示密码"} aria-pressed={visible} disabled={pending} onClick={() => setVisible(!visible)}><Icon name={visible ? "eyeOff" : "eye"} size={20} /></button></div>
+            <div className="mini-error" role="alert">{error}</div><button className="mini-primary" disabled={pending}>{pending ? "正在登录…" : "登录"}</button>
+            <p className="mini-account-note">账号由管理员分配</p>
+          </form><footer>监控画面 · 设备状态 · 告警证据</footer>
+        </section> : screen === "monitor" ? <>
+          <div className="mini-page-heading"><span className="mini-eyebrow">已发布监控画面 · demo</span><h2>冷却系统监控</h2><p>演示车间 / 冷却泵 P-101</p></div>
+          <div className={`mini-connection ${stale ? "mini-warning" : ""}`} role="status"><span className="mini-dot"></span><strong>{dataMode === "offline" ? "网络已断开" : "实时数据已连接"}</strong><span>{stale ? "数据已过期" : waiting ? "等待数据" : "每秒更新"}</span></div>
+          {stale && <div className="mini-notice">{dataMode === "offline" ? "恢复网络后重新连接并获取快照。" : "连接正常，但没有收到新观测。"}保留最后观测，不作为当前实时值。</div>}
+          <article className={`mini-metric ${stale ? "is-stale" : ""}`}><div className="mini-card-label"><span>出口温度</span><Icon name="metric" size={19} /></div><div className="mini-number">{waiting ? "--" : empty ? "74.0" : value.toFixed(1)}<span>°C</span></div><div className="mini-metric-meta"><span>{waiting ? "等待首次观测" : stale ? "最后一次观测" : empty ? "正常范围" : "超过阈值 80.0 °C"}</span><span>{waiting ? "尚未更新" : stale ? "超过 5 秒未更新" : "刚刚更新"}</span></div></article>
+          <article className="mini-card mini-device"><span className="mini-device-icon"><Icon name="device" size={23} /></span><div><span>冷却泵 P-101</span><strong>{waiting ? "等待状态" : "运行"}</strong><small>{waiting ? "尚未收到设备状态" : stale ? "状态数据已过期" : "设备状态刚刚更新"}</small></div><span className={`mini-state ${stale || waiting ? "muted" : ""}`}>{stale ? "过期" : waiting ? "等待" : "运行中"}</span></article>
+          <div className="mini-section-title"><h3>活动告警 <span>{waiting ? "—" : empty ? "0" : "1"}</span></h3><button onClick={() => { setHistory(true); go("detail"); }}>历史 <Icon name="history" /></button></div>
+          {empty || waiting ? <div className="mini-card mini-empty"><Icon name="bell" size={25} /><strong>{waiting ? "等待告警数据" : "暂无活动告警"}</strong><p>{waiting ? "收到可信观测后判断告警状态。" : "当前观测未触发告警，可查看已恢复历史。"}</p></div> : <button className="mini-alarm" onClick={() => { setHistory(false); go("detail"); }}><span className="mini-alarm-icon"><Icon name="bell" size={21} /></span><span><strong>出口温度越界</strong><small>{stale ? "最后观测触发 · 数据已过期" : "当前观测触发 · 尚未恢复"}</small></span><span className="mini-chevron">›</span></button>}
+          <div className="mini-footnote">发布版本 v3 · {waiting ? "尚未收到观测" : `最后观测 ${time}`}<br />演示数据，不代表现场设备</div>
+        </> : <>
+          <div className="mini-page-heading"><span className="mini-eyebrow">冷却泵 P-101 · 发布版本 v3</span><h2>出口温度越界</h2><p>{history ? "已恢复历史 · 最近 24 小时" : "活动告警 · 当前已发布规则"}</p></div>
+          <article className="mini-card mini-detail-summary"><span className={`mini-state ${history ? "" : "alarm"}`}>{history ? "已恢复" : "尚未恢复"}</span><div className="mini-detail-value">{history ? "74.0" : waiting ? "--" : value.toFixed(1)} <span>°C</span></div><p>触发规则：出口温度 ≥ 80.0 °C</p><small>{history ? "演示事件：10:18:02 触发 / 10:21:35 恢复" : waiting ? "尚未收到观测" : stale ? "最后观测已过期，暂不分析" : `最新观测 ${time}`}</small></article>
+          <h3 className="mini-subtitle">观测依据</h3><details className="mini-card mini-evidence"><summary>查看观测记录 <span>展开</span></summary><p>以下为原型固定示例，非数据库记录。</p><dl><dt>越界观测 · SIM-102</dt><dd>10:18:02 · 81.2 °C</dd><dt>{history ? "恢复观测 · SIM-104" : "后续越界观测 · SIM-103"}</dt><dd>{history ? "10:21:35 · 74.0 °C" : "10:18:03 · 83.0 °C"}</dd></dl><small>时间为服务端接收时间。本例不推断根因。</small></details>
+          {!history && <><h3 className="mini-subtitle"><Icon name="spark" size={18} /> 智能分析</h3><article className="mini-card mini-analysis">
+            {analysis === "idle" && <><p>结合近期观测与模拟手册，查看异常线索和引用依据。</p><button className="mini-primary" disabled={stale || waiting || empty} onClick={diagnose}>分析这条告警</button>{(stale || waiting || empty) && <small>等待新的可信活动告警观测后再分析。</small>}</>}
+            {analysis === "loading" && <p role="status">正在核对观测依据…</p>}
+            {analysis === "success" && <div role="status"><strong>连续两条观测超过温度阈值</strong><p>演示观测从 81.2 °C 升至 83.0 °C，均超过 80.0 °C。现有证据能确认越界，无法确定设备故障原因。</p><details><summary>引用依据 · 2 条</summary><p>SIM-102：81.2 °C<br />SIM-103：83.0 °C<br />均为原型模拟记录。</p></details><small>固定演示结果 · 未调用模型</small></div>}
+            {analysis === "insufficient" && <div role="status"><strong>证据不足</strong><p>近期可用观测不足两条，暂时无法分析。收到更多观测后可重试。</p><button className="mini-secondary" onClick={diagnose}>重新查询依据</button></div>}
+            {analysis === "failure" && <div role="alert"><strong>分析服务暂时不可用</strong><p>监控和告警查看仍可使用，请稍后重试。</p><button className="mini-secondary" onClick={diagnose}>重试分析</button></div>}
+          </article></>}
+          <p className="mini-footnote">{history ? "历史仅展示当前发布版本内可证实的触发与恢复。" : "分析用于模拟项目，不提供设备控制建议。"}</p>
+        </>}
+      </div>
+      <footer className="mini-bottom"><span>{screen === "login" ? "安全登录 · 平台账号" : "demo · 移动监控"}</span>{screen !== "login" && <button onClick={() => { window.clearTimeout(timer.current); setPending(false); setAnalysis("idle"); setScreen("login"); setTarget("monitor"); setPassword(""); setExpired(false); }}>退出登录</button>}</footer>
+    </section>
+  </main>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  new URLSearchParams(window.location.search).get("screen") === "miniprogram"
+    ? <MiniProgramPrototype /> : <TrendPrototypeApp />
+);

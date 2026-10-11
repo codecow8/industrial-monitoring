@@ -40,7 +40,7 @@ def token_hash(token: str) -> str:
 
 
 def allowed_origins() -> list[str]:
-    local = [f"http://{host}:{port}" for host in ("localhost", "127.0.0.1") for port in (5173, 4173, 4174)]
+    local = [f"http://{host}:{port}" for host in ("localhost", "127.0.0.1") for port in (5173, 5174, 4173, 4174, 8000)]
     return os.getenv("AUTH_ALLOWED_ORIGINS", ",".join(local)).split(",")
 
 
@@ -59,8 +59,18 @@ def valid_login(session: Session, hashed_token: str) -> AuthSession | None:
     ))
 
 
+def session_token(request: HTTPConnection) -> str:
+    authorization = request.headers.get("authorization")
+    if authorization is not None:
+        scheme, _, token = authorization.partition(" ")
+        # Only explicitly issued mini sessions may travel as Bearer tokens.
+        return token if scheme.lower() == "bearer" and token.startswith("mini_") else ""
+    cookie = request.cookies.get(COOKIE_NAME, "")
+    return cookie if not cookie.startswith("mini_") else ""
+
+
 def current_user(request: Request, session: Session = Depends(get_session)) -> AuthUser:
-    token = request.cookies.get(COOKIE_NAME, "")
+    token = session_token(request)
     login_session = valid_login(session, token_hash(token)) if token else None
     user = session.get(AuthUser, login_session.user_id) if login_session else None
     if user is None:
@@ -68,8 +78,14 @@ def current_user(request: Request, session: Session = Depends(get_session)) -> A
     return user
 
 
+def require_editor(user: AuthUser = Depends(current_user)) -> AuthUser:
+    if user.role != "editor":
+        raise HTTPException(403, "此账号仅可查看监控，不能读取草稿、编辑或发布。")
+    return user
+
+
 def describe_user(user: AuthUser, expires_at: datetime) -> dict:
-    return {"id": user.id, "username": user.username, "expiresAt": expires_at.isoformat()}
+    return {"id": user.id, "username": user.username, "role": user.role, "expiresAt": expires_at.isoformat()}
 
 
 def secure_cookie() -> bool:
@@ -81,8 +97,7 @@ class LoginInput(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
-@router.post("/login", dependencies=[Depends(check_origin)])
-def login(body: LoginInput, request: Request, response: Response, session: Session = Depends(get_session)) -> dict:
+def create_login(body: LoginInput, request: Request, session: Session, *, mini: bool) -> tuple[AuthUser, str, datetime]:
     now = datetime.now(UTC)
     # Atomic per-peer limit; do not trust arbitrary forwarded headers.
     peer = request.client.host if request.client else "unknown"
@@ -98,24 +113,37 @@ def login(body: LoginInput, request: Request, response: Response, session: Sessi
     valid = verify_password(body.password, user.password_hash if user else DUMMY_PASSWORD_HASH)
     if not valid or user is None:
         raise HTTPException(401, "账号或密码错误，请重新输入。")
-    previous = request.cookies.get(COOKIE_NAME)
-    if previous:
+    previous = session_token(request)
+    if previous and previous.startswith("mini_") == mini:
         session.execute(delete(AuthSession).where(AuthSession.token_hash == token_hash(previous)))
     session.execute(delete(AuthSession).where(AuthSession.expires_at <= now))
-    token = secrets.token_urlsafe(32)
+    token = ("mini_" if mini else "") + secrets.token_urlsafe(32)
     expires_at = now + timedelta(seconds=SESSION_SECONDS)
     session.add(AuthSession(token_hash=token_hash(token), user_id=user.id, expires_at=expires_at))
     session.commit()
+    return user, token, expires_at
+
+
+@router.post("/login", dependencies=[Depends(check_origin)])
+def login(body: LoginInput, request: Request, response: Response, session: Session = Depends(get_session)) -> dict:
+    user, token, expires_at = create_login(body, request, session, mini=False)
     response.set_cookie(COOKIE_NAME, token, max_age=SESSION_SECONDS, httponly=True,
                         secure=secure_cookie(), samesite="lax", path="/")
     response.headers["Cache-Control"] = "no-store"
     return describe_user(user, expires_at)
 
 
+@router.post("/mini/login", dependencies=[Depends(check_origin)])
+def mini_login(body: LoginInput, request: Request, response: Response, session: Session = Depends(get_session)) -> dict:
+    user, token, expires_at = create_login(body, request, session, mini=True)
+    response.headers["Cache-Control"] = "no-store"
+    return {**describe_user(user, expires_at), "token": token}
+
+
 @router.get("/me")
 def me(request: Request, response: Response, user: AuthUser = Depends(current_user),
        session: Session = Depends(get_session)) -> dict:
-    item = session.get(AuthSession, token_hash(request.cookies[COOKIE_NAME]))
+    item = session.get(AuthSession, token_hash(session_token(request)))
     if item is None:
         raise HTTPException(401, "登录已过期，请重新登录后继续。")
     response.headers["Cache-Control"] = "no-store"
@@ -124,8 +152,9 @@ def me(request: Request, response: Response, user: AuthUser = Depends(current_us
 
 @router.post("/logout", status_code=204, dependencies=[Depends(check_origin)])
 def logout(request: Request, session: Session = Depends(get_session)) -> Response:
-    session.execute(delete(AuthSession).where(AuthSession.token_hash == token_hash(request.cookies.get(COOKIE_NAME, ""))))
+    session.execute(delete(AuthSession).where(AuthSession.token_hash == token_hash(session_token(request))))
     session.commit()
     response = Response(status_code=204, headers={"Cache-Control": "no-store"})
-    response.delete_cookie(COOKIE_NAME, path="/", secure=secure_cookie(), httponly=True, samesite="lax")
+    if not request.headers.get("authorization"):
+        response.delete_cookie(COOKIE_NAME, path="/", secure=secure_cookie(), httponly=True, samesite="lax")
     return response

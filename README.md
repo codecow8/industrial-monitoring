@@ -13,13 +13,14 @@
 
 Task 1 不包含后端、WebSocket、ECharts、Electron、小程序或 Agent。
 
-Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task 3 已完成实时趋势图、组件右键删除、设备状态、活动告警列表和 Electron 桌面壳。后续已接入本机 Web Pi SDK 产品帮助，支持指南、活动告警和历史告警查询。小程序、真实设备和持久化历史曲线仍不在当前实现范围内。
+Task 2 已完成草稿持久化、发布版本与实时遥测三个切片；Task 3 已完成实时趋势图、组件右键删除、设备状态、活动告警列表和 Electron 桌面壳。后续已接入本机 Web Pi SDK 产品帮助，支持指南、活动告警和历史告警查询。新增微信小程序移动查看端，支持登录、已发布画面指标/设备状态、活动与历史告警、观测依据和智能分析；真实设备和持久化历史曲线仍不在当前实现范围内。
 
 ## 目录职责
 
 ```text
 apps/web                 编辑器与运行态入口
 apps/electron            复用 Web Renderer 的安全 Electron 桌面壳
+apps/miniprogram         uni-app 微信小程序移动查看端（游客开发模式）
 packages/schema          PageSchema 与运行时校验
 packages/renderer-core   不依赖 Pinia 的 DOM Renderer
 packages/components-web  指标卡、实时趋势图、设备状态、活动告警列表、纯文本块和 Web 组件注册表
@@ -190,3 +191,9 @@ LIVE_MODEL_EVAL=1 pnpm exec playwright test --config playwright.live.config.ts
 ```
 
 验收会创建独立的模拟页面和遥测记录，并产生两次真实模型请求：分别分析温度越界和设备故障；另验证单点证据不足与恢复后告警消失。密钥只由后端读取，不写入测试或浏览器。
+
+## 微信小程序
+
+运行 `pnpm dev:miniprogram`，在微信开发者工具导入 `apps/miniprogram/dist/dev/mp-weixin`；单次构建用 `pnpm build:miniprogram`。当前采用游客 AppID，与平台账号登录分开。详见 [小程序启动与验证边界](./apps/miniprogram/README.md)。
+
+手机版 H5 面试入口：`https://industrial.everdojo.cn/mobile/`。展示账号使用 viewer 角色，可通过 `python -m industrial_api.create_user interviewer --role viewer` 创建；服务端禁止 viewer 读取草稿、编辑和发布。

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete
 from starlette.concurrency import run_in_threadpool
 
-from .auth import COOKIE_NAME, check_origin, token_hash, valid_login
+from .auth import check_origin, session_token, token_hash, valid_login
 from .database import SessionFactory
 from .freshness import latest_observations, observation
 from .models import TelemetryObservation
@@ -231,7 +231,7 @@ async def telemetry_stream(websocket: WebSocket, page_key: str, version: int | N
     except HTTPException:
         await websocket.close(code=4403)
         return
-    token = websocket.cookies.get(COOKIE_NAME, "")
+    token = session_token(websocket)
     hashed_token = token_hash(token)
     try:
         expiry = await asyncio.wait_for(run_in_threadpool(login_expiry, hashed_token), AUTH_CHECK_TIMEOUT) if token else None

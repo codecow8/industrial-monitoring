@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Identity, Index, Integer, Text, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, BigInteger, DateTime, ForeignKey, Identity, Index, Integer, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -71,10 +71,12 @@ class TelemetryObservation(Base):
 
 class AuthUser(Base):
     __tablename__ = "auth_users"
+    __table_args__ = (CheckConstraint("role IN ('editor', 'viewer')", name="ck_auth_users_role"),)
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     username: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False, server_default="editor")
 
 
 class AuthSession(Base):

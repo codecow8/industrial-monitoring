@@ -26,6 +26,17 @@
 		reverse_proxy api:8000
 	}
 
+	# Mobile H5 shares the API/session origin; assets live under /mobile/.
+	handle /mobile {
+		redir /mobile/ 302
+	}
+
+	handle_path /mobile/* {
+		root * /srv/mobile
+		try_files {path} /index.html
+		file_server
+	}
+
 	handle /editor/* {
 		try_files {path} /index.html
 		file_server

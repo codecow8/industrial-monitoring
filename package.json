@@ -21,7 +21,11 @@
     "typecheck": "pnpm --filter @industrial/web typecheck",
     "test": "pnpm --filter @industrial/schema test && pnpm --filter @industrial/telemetry-client test && pnpm --filter @industrial/renderer-core test && pnpm --filter @industrial/components-web test",
     "test:api": "cd services/api && uv run --python 3.12 pytest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "dev:miniprogram": "pnpm --filter @industrial/miniprogram dev",
+    "build:miniprogram": "pnpm --filter @industrial/miniprogram build",
+    "test:miniprogram": "pnpm --filter @industrial/miniprogram test",
+    "dev:miniprogram:h5": "pnpm --filter @industrial/miniprogram dev:h5"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"

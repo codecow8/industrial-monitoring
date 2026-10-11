@@ -1,0 +1,8 @@
+{
+  "pages": [
+    { "path": "pages/login/index", "style": { "navigationBarTitleText": "工业智控" } },
+    { "path": "pages/monitor/index", "style": { "navigationBarTitleText": "工业智控", "enablePullDownRefresh": true } },
+    { "path": "pages/detail/index", "style": { "navigationBarTitleText": "告警详情", "onReachBottomDistance": 80 } }
+  ],
+  "globalStyle": { "navigationBarTextStyle": "white", "navigationBarBackgroundColor": "#0a1520", "backgroundColor": "#0a1520" }
+}

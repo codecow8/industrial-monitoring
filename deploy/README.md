@@ -56,7 +56,7 @@ RELEASE_SHA=$(basename "$(pwd -P)") docker compose --env-file ../.env -f compose
 ## Demo access
 
 - Login required: editor/runtime pages, published schemas, alarm snapshots/history/evidence and WebSocket telemetry. Health and login remain reachable without a session; device ingestion retains its internal-network contract.
-- Account login: `/editor/demo`, drafts, publishing, diagnosis and other API routes. Sharing the account also grants editing rights; only give it to trusted reviewers.
+- Accounts have editor/viewer roles. Existing accounts remain editors. Viewer accounts may read published runtime data and alarms and request diagnosis, but draft reads, editing and publishing return 403.
 - Telemetry ingestion: internal Docker network only; denied at gateway.
 - Product help: 503; personal Pi credentials are not deployed.
 
@@ -69,3 +69,15 @@ docker compose --env-file ../.env -f compose.yml exec api python -m industrial_a
 The command prompts twice without echoing the password. It refuses to overwrite existing accounts. Run it after the first deployment and before distributing editor access. Browser accounts are stored in PostgreSQL; sessions expire after eight hours and logout revokes them. HTTPS deployment sets Secure cookies. The API has no published port; forwarded client addresses are trusted only from the internal Docker network. Login is limited to ten attempts per client per minute.
 
 First open `/editor/demo`, sign in, save and publish. Then open `/runtime/demo` with the same login. Anonymous schema/alarm reads and WebSocket subscriptions must be rejected. Verify realtime WebSocket updates, page refresh, unauthorized writes (401), telemetry denial (404), and existing EverDojo availability.
+
+## Mobile interview demo
+
+`/mobile/` serves the uni-app H5 build from the same Web image and API origin. CI verifies H5 and WeChat builds and tests; deployment smoke checks require /mobile/assets/ references so the old Web SPA fallback cannot masquerade as a successful mobile release.
+
+After deploying the account migrations, create a viewer account in the API container:
+
+```bash
+docker compose --env-file ../.env -f compose.yml exec api python -m industrial_api.create_user interviewer --role viewer
+```
+
+Keep the password in a secure channel and give it only to intended reviewers. The initial account migration does not import old Basic Auth passwords; provision an editor account for the project owner if no editor exists. Verify login, viewer role, read-only data/WSS, editing/publishing 403, logout and rejected session reuse. A shared-origin H5 smoke does not substitute for real WeChat device verification.

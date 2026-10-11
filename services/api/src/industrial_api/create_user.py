@@ -15,6 +15,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="创建工业监控登录账号")
     parser.add_argument("username")
     parser.add_argument("--generate", action="store_true", help="生成随机初始密码并仅输出一次")
+    parser.add_argument("--role", choices=["editor", "viewer"], default="editor", help="viewer 仅能查看监控，不能编辑或发布")
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", args.username):
         parser.error("账号限 1–64 位字母、数字、点、下划线或连字符")
@@ -26,7 +27,7 @@ def main() -> None:
             parser.error("密码长度应为 12–256 位")
         if not args.generate and password != getpass.getpass("确认密码："):
             parser.error("两次密码不一致")
-        session.add(AuthUser(username=args.username, password_hash=hash_password(password)))
+        session.add(AuthUser(username=args.username, password_hash=hash_password(password), role=args.role))
     print(f"已创建账号：{args.username}")
     if args.generate:
         print(f"初始密码：{password}")

@@ -32,6 +32,7 @@ jobs:
       - run: npm install --global pnpm@12.4.1
       - run: pnpm install --frozen-lockfile
       - run: pnpm test && pnpm --filter @industrial/web test:help && pnpm typecheck && pnpm build
+      - run: pnpm test:miniprogram && pnpm --filter @industrial/miniprogram typecheck && pnpm --filter @industrial/miniprogram build:h5 && pnpm build:miniprogram
       - run: pnpm --dir services/agent install --frozen-lockfile && pnpm --dir services/agent test
       - uses: astral-sh/setup-uv@v6
         with:
@@ -121,3 +122,4 @@ jobs:
           [[ "$DOMAIN" =~ ^[a-zA-Z0-9.-]+$ ]]
           curl --fail --retry 12 --retry-delay 10 --retry-all-errors "https://$DOMAIN/api/health"
           curl --fail "https://$DOMAIN/runtime/demo" -o /dev/null
+          curl --fail "https://$DOMAIN/mobile/" | grep -q '/mobile/assets/'
