@@ -9,7 +9,7 @@
           "path": "industrial-editor.html",
           "createdAt": "2026-09-18T00:54:59.299Z",
           "status": "approved",
-          "subtitle": "微信小程序登录、监控、告警详情及异常状态已批准",
+          "subtitle": "网页与移动登录页直接显示登录账号密码，用户已批准",
           "viewport": {
             "width": 1440,
             "height": 960
@@ -19,5 +19,5 @@
     }
   },
   "createdAt": "2026-09-12T02:22:21.715Z",
-  "updatedAt": "2026-10-11T07:41:41.283444+00:00"
+  "updatedAt": "2026-10-12"
 }

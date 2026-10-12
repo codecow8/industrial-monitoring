@@ -1291,7 +1291,7 @@ function LoginScreen({ onLogin, expired, runtimeRequired }) {
     timer.current = window.setTimeout(() => {
       setPending(false);
       if (failure) { setError("登录服务暂时不可用，请稍后重试。"); return; }
-      if (username.trim() !== "admin" || password !== "Industrial123!") { setError("账号或密码错误，请重新输入。"); return; }
+      if (!((username.trim() === "admin" && password === "Industrial123!") || (username.trim() === "interviewer" && password === "DemoViewer2026!"))) { setError("账号或密码错误，请重新输入。"); return; }
       setPassword(""); onLogin();
     }, 700);
   };
@@ -1312,7 +1312,11 @@ function LoginScreen({ onLogin, expired, runtimeRequired }) {
         <div className="login-password"><input id="login-password" type={visible ? "text" : "password"} autoComplete="current-password" value={password} disabled={pending} placeholder="请输入密码" aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} onChange={(event) => { setPassword(event.target.value); setError(""); }} /><button type="button" disabled={pending} aria-label={visible ? "隐藏密码" : "显示密码"} aria-pressed={visible} onClick={() => setVisible(!visible)}><Icon name={visible ? "eyeOff" : "eye"} size={18} /></button></div>
         <div className="login-error-space">{error && <p id="login-error" className="login-error" role="alert">{error}</p>}</div>
         <button className="btn btn-primary login-submit" type="submit" disabled={pending}>{pending ? "正在登录…" : "登录"}</button>
-        <p className="login-account-note">账号由管理员分配。如需帮助，请联系管理员。</p>
+        <section className="demo-credentials" aria-label="登录账号信息">
+          <strong>登录账号</strong>
+          <dl><div><dt>账号</dt><dd>interviewer</dd></div><div><dt>密码</dt><dd>DemoViewer2026!</dd></div></dl>
+        </section>
+        <p className="login-account-note">使用以上账号登录，查看项目。</p>
         <div className="login-demo"><strong>原型演示账号</strong><code>admin / Industrial123!</code><label><input type="checkbox" checked={failure} disabled={pending} onChange={(event) => setFailure(event.target.checked)} />模拟登录服务不可用</label></div>
       </form>
     </section>
@@ -1423,7 +1427,7 @@ function MiniProgramPrototype() {
     timer.current = window.setTimeout(() => {
       setPending(false);
       if (loginFailure) { setError("登录服务暂时不可用，请稍后重试。"); return; }
-      if (username.trim() !== "demo" || password !== "demo") { setError("账号或密码错误，请重新输入。"); return; }
+      if (!((username.trim() === "demo" && password === "demo") || (username.trim() === "interviewer" && password === "DemoViewer2026!"))) { setError("账号或密码错误，请重新输入。"); return; }
       setPassword(""); setExpired(false); setScreen(target); setDataMode("live"); setLastReceived(new Date());
     }, 600);
   };
@@ -1471,7 +1475,11 @@ function MiniProgramPrototype() {
             <label htmlFor="mini-account">账号</label><input id="mini-account" autoComplete="off" placeholder="请输入平台账号" value={username} disabled={pending} onChange={e => { setUsername(e.target.value); setError(""); }} />
             <label htmlFor="mini-password">密码</label><div className="mini-password"><input id="mini-password" autoComplete="off" placeholder="请输入密码" type={visible ? "text" : "password"} value={password} disabled={pending} onChange={e => { setPassword(e.target.value); setError(""); }} /><button type="button" aria-label={visible ? "隐藏密码" : "显示密码"} aria-pressed={visible} disabled={pending} onClick={() => setVisible(!visible)}><Icon name={visible ? "eyeOff" : "eye"} size={20} /></button></div>
             <div className="mini-error" role="alert">{error}</div><button className="mini-primary" disabled={pending}>{pending ? "正在登录…" : "登录"}</button>
-            <p className="mini-account-note">账号由管理员分配</p>
+            <section className="demo-credentials mini-demo-credentials" aria-label="登录账号信息">
+              <strong>登录账号</strong>
+              <dl><div><dt>账号</dt><dd>interviewer</dd></div><div><dt>密码</dt><dd>DemoViewer2026!</dd></div></dl>
+                </section>
+            <p className="mini-account-note">使用以上账号登录，查看项目</p>
           </form><footer>监控画面 · 设备状态 · 告警证据</footer>
         </section> : screen === "monitor" ? <>
           <div className="mini-page-heading"><span className="mini-eyebrow">已发布监控画面 · demo</span><h2>冷却系统监控</h2><p>演示车间 / 冷却泵 P-101</p></div>

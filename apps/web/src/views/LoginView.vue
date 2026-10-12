@@ -7,6 +7,8 @@ import UiIcon from "@/components/UiIcon.vue";
 const route = useRoute();
 const router = useRouter();
 const runtimeTarget = computed(() => loginTarget(route.query.redirect).startsWith("/runtime/"));
+const publicLoginUsername = import.meta.env.VITE_PUBLIC_LOGIN_USERNAME || "";
+const publicLoginPassword = import.meta.env.VITE_PUBLIC_LOGIN_PASSWORD || "";
 const username = ref("");
 const password = ref("");
 const visible = ref(false);
@@ -55,7 +57,11 @@ async function submit(): Promise<void> {
         </div>
         <div class="login-error-space"><p v-if="error" id="login-error" class="login-error" role="alert">{{ error }}</p></div>
         <button class="app-button app-button--primary login-submit" type="submit" :disabled="pending">{{ pending ? "正在登录…" : "登录" }}</button>
-        <p class="login-account-note">账号由管理员分配。如需帮助，请联系管理员。</p>
+        <section v-if="publicLoginUsername && publicLoginPassword" class="login-account-info" aria-label="登录账号信息">
+          <strong>登录账号</strong>
+          <dl><div><dt>账号</dt><dd>{{ publicLoginUsername }}</dd></div><div><dt>密码</dt><dd>{{ publicLoginPassword }}</dd></div></dl>
+        </section>
+        <p class="login-account-note">{{ publicLoginUsername && publicLoginPassword ? "使用以上账号登录，查看项目。" : "账号由管理员分配。如需帮助，请联系管理员。" }}</p>
       </form>
     </section>
   </main>

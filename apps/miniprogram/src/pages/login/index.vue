@@ -3,6 +3,8 @@ import { ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { login, loginTarget } from "../../data/auth";
 import UiIcon from "../../components/UiIcon.vue";
+const publicLoginUsername = import.meta.env.VITE_PUBLIC_LOGIN_USERNAME || "";
+const publicLoginPassword = import.meta.env.VITE_PUBLIC_LOGIN_PASSWORD || "";
 const username = ref(""); const password = ref(""); const visible = ref(false);
 const pending = ref(false); const error = ref(""); const expired = ref(false);
 let target = "/pages/monitor/index";
@@ -25,9 +27,15 @@ async function submit() {
     <text class="input-label">账号</text><input v-model="username" placeholder="请输入平台账号" :disabled="pending" maxlength="64" @input="error = ''" />
     <text class="input-label">密码</text><view class="password-row"><input v-model="password" :password="!visible" placeholder="请输入密码" :disabled="pending" maxlength="256" confirm-type="done" @confirm="submit" @input="error = ''" /><button class="eye-button" :aria-label="visible ? '隐藏密码' : '显示密码'" :disabled="pending" @tap="visible = !visible"><UiIcon :name="visible ? 'eyeOff' : 'eye'" /></button></view>
     <text class="error-space" role="alert">{{ error }}</text><button class="primary" :disabled="pending" :loading="pending" @tap="submit">{{ pending ? '正在登录…' : '登录' }}</button>
-    <text class="account-note muted">账号由管理员分配</text><text class="login-footer muted">监控画面 · 设备状态 · 告警证据</text>
+    <view v-if="publicLoginUsername && publicLoginPassword" class="account-info">
+      <text class="account-info-title">登录账号</text>
+      <view class="account-info-row"><text class="muted">账号</text><text class="account-info-value" selectable>{{ publicLoginUsername }}</text></view>
+      <view class="account-info-row"><text class="muted">密码</text><text class="account-info-value" selectable>{{ publicLoginPassword }}</text></view>
+    </view>
+    <text class="account-note muted">{{ publicLoginUsername && publicLoginPassword ? "使用以上账号登录，查看项目" : "账号由管理员分配" }}</text><text class="login-footer muted">监控画面 · 设备状态 · 告警证据</text>
   </view>
 </template>
 <style scoped>
 .login-screen { padding-top: 58px; }.login-title { display:block; white-space:pre-line; font-size:35px; font-weight:600; line-height:1.35; margin:16px 0; letter-spacing:-1px; }.intro{display:block;margin-bottom:35px;font-size:12px;}.input-label{display:block;font-size:12px;color:#b2c8d8;margin:18px 0 9px;}.password-row{position:relative;}.password-row input{padding-right:50px;}.eye-button{position:absolute;right:4px;top:4px;width:42px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;}.error-space{display:block;min-height:36px;font-size:12px;color:#f2a2a8;padding:9px 0;box-sizing:border-box;}.account-note{display:block;text-align:center;font-size:11px;margin-top:16px;}.login-footer{display:block;text-align:center;font-size:10px;margin-top:55px;}
+.account-info{margin-top:20px;padding:14px;border:1px solid #ffffff1c;border-radius:6px;background:#182733;font-size:12px;}.account-info-title{display:block;font-weight:600;margin-bottom:12px;}.account-info-row{display:flex;align-items:baseline;gap:16px;margin-top:8px;}.account-info-row>.muted{flex:0 0 28px;}.account-info-value{font-family:monospace;overflow-wrap:anywhere;word-break:break-all;user-select:text;}
 </style>

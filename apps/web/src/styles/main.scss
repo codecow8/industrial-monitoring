@@ -278,6 +278,12 @@ button { border: 0; }
       .login-error { font-size: 12px; margin: 0; color: #b73542; line-height: 1.6; }
       .login-submit { width: 100%; height: 46px; justify-content: center; font-size: 14px; }
       .login-submit:disabled { opacity: .6; cursor: wait; }
+      .login-account-info { margin-top: 20px; padding: 16px; border: 1px solid var(--slate-200); border-radius: 6px; background: var(--slate-50); font-size: 12px; }
+      .login-account-info strong { color: var(--slate-700); font-weight: 600; }
+      .login-account-info dl { margin: 12px 0 0; display: grid; gap: 8px; }
+      .login-account-info dl > div { display: flex; align-items: baseline; gap: 16px; }
+      .login-account-info dt { color: var(--slate-500); flex: 0 0 28px; }
+      .login-account-info dd { margin: 0; color: var(--ink-950); font-family: ui-monospace, monospace; user-select: text; overflow-wrap: anywhere; }
       .login-account-note { text-align: center; margin: 16px 0 32px; }
       .login-notice { padding: 12px 14px; background: #fff3df; color: #805810; border: 1px solid #eed7ae; border-radius: 4px; font-size: 13px; line-height: 1.7; }
       .account-actions { display: flex; gap: 8px; align-items: center; padding-left: 12px; border-left: 1px solid var(--slate-700); }
